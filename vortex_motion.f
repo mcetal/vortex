@@ -7,19 +7,29 @@ c  islands
 c
 c  the problem is set up so that there is circulation around the island 
 c  at the north pole, only
+c 
+c  Solve:
+c     laplace_beltrami(u) = 0 (except at point vortex locations)
+c       u = 0 on \gamma_1
+c       u = A_k on \gamma_k
 c
 c
 c     ------------------------------------------------------------------
       implicit real*8 (a-h, o-z)
-      parameter (kmax = 10, npmax = 512, nmax = kmax*npmax)
+      parameter (kmax = 10, npmax = 2048, nmax = kmax*npmax)
 c
 c Geometry of holes
       dimension ak(kmax), bk(kmax), th_k(kmax), phi_k(kmax), cx(kmax),
      1          cy(kmax), cz(kmax)
+      complex*16 zeta_k(kmax)
+c
+c Information about source points on the sphere
       dimension xs(nmax), ys(nmax), zs(nmax), dx(nmax), dy(nmax),
-     1          dz(nmax), xn(nmax), yn(nmax), zn(nmax)
-      dimension dsda(nmax), diag(nmax)
-      dimension diag_stereo(nmax), d2x(nmax), d2y(nmax), d2z(nmax)
+     1          dz(nmax), d2x(nmax), d2y(nmax), d2z(nmax)
+c
+c Information about source points in stereographic plane  
+c (i.e. the discretization points)
+      dimension diag(nmax), x_zeta(nmax), y_zeta(nmax)
       complex*16 dzeta(nmax), zeta(nmax)
 c
 c  Grid variables
@@ -27,24 +37,19 @@ c  Grid variables
      1          ng_max = nth_max*nphi_max)
       dimension igrid(ng_max), th_gr(ng_max), phi_gr(ng_max),
      1          u_gr(ng_max), x_gr(ng_max), y_gr(ng_max), z_gr(ng_max),
-     2          xzeta_gr(ng_max), yzeta_gr(ng_max), uex_gr(ng_max),
+     2          xzeta_gr(ng_max), yzeta_gr(ng_max), 
      3          alph_gr(ng_max)
       complex*16 zeta_gr(ng_max)
 c
 c target points are used to check accuracy
-      dimension xtar(ng_max), ytar(ng_max), ztar(ng_max), 
-     1          xz_tar(ng_max), yz_tar(ng_max), u_tar(ng_max)
-      complex*16 zeta_tar(ng_max)    
+      parameter (ntar_max = 1000)
+      dimension xz_tar(ntar_max), yz_tar(ntar_max), u_tar(ntar_max)
+      complex*16 zeta_tar(ntar_max) 
 c
-c System
-      dimension aKu(nmax), density(nmax), A_k(kmax)
+c boundary conditions
+      dimension rhs(nmax), A_k(kmax)   
 c
-c Exact potential
-      dimension phi_ex(nmax), phi_1e(nmax), phi_2e(nmax), phi_3e(nmax),
-     1          phi_1(nmax), phi_2(nmax), phi_3(nmax)
-      complex*16 zfield_ex(nmax)
-c
-c Point Vorticies
+c Point Vortices
       parameter (nvortmax = 100)
       dimension vort_k(nvortmax), x1_vort(nvortmax), x2_vort(nvortmax), 
      1          x3_vort(nvortmax)
@@ -55,103 +60,81 @@ c  MAXL is the maximum nubmer of GMRES iterations performed
 c       before restarting.
 c  LRWORK is the dimension of a real workspace needed by DGMRES.
 c  LIWORK is the dimension of an integer workspace needed by DGMRES.
-c  GMWORK and IWORK are work arrays used by DGMRES
+c  GMWORK and IGWORK are work arrays used by DGMRES
 c
       parameter (maxl = 50,liwork=30,  
      1           lrwork=10+(nmax+kmax)*(maxl+6)+maxl*(maxl+3))
       dimension gmwork(lrwork), igwork(liwork)
-      dimension rhs(nmax+kmax), soln(nmax+kmax)
-c
-c  Preconditioner arrays
-      dimension IPVTBF(kmax)
-      DIMENSION SCHUR(kmax*kmax),WB(kmax)
-
+      dimension density(nmax)
 c
 c Fast Multipole Arrays
       parameter (nsp = 20*nmax + 20*ng_max)
-      dimension x_zeta(nmax+ng_max), y_zeta(nmax+ng_max)
+      dimension xat(nmax+ng_max), yat(nmax+ng_max)
       complex*16 qa(nmax+ng_max), cfield(nmax+ng_max)
       dimension poten(nmax+ng_max), wksp(nsp)
 c
+c Logicals
+      logical make_movie, debug
+c
 c Other arrays
       dimension alpha(nmax), w(nmax), u(nmax)
-      complex*16 zeta_k(kmax), zf(nmax), wsave(20*nmax)
       REAL*4 TIMEP(2), ETIME
 c
 c common blocks
-      common /geometry/ x_zeta, y_zeta, zeta, dzeta, dsda
-      common /inteqn/ diag_stereo, cx, cy, cz, zeta_k
+      common /geometry/ x_zeta, y_zeta, zeta, dzeta
+      common /inteqn/ diag, zeta_k
       common /sys_size/ k, nd, nbk
       common /fasblk2/ schur,wb,ipvtbf
-      common /sphere_int/ xs, ys, zs, xn, yn, zn, diag
 c
-c Open output files
-         open (unit = 11, file = 'movie/blob.m')
-         open (unit = 21, file = 'density.m')
-         open (unit = 22, file = 'vort_loc.m')
-         open (unit = 31, file = 'movie/igrid.dat')
-         open (unit = 32, file = 'movie/xgrid.dat')
-         open (unit = 33, file = 'movie/ygrid.dat')
-         open (unit = 34, file = 'movie/zgrid.dat')
-         open (unit = 35, file = 'movie/xzeta_grid.dat')
-         open (unit = 36, file = 'movie/yzeta_grid.dat')
-         open (unit = 37, file = 'movie/u_movie.m')
-         open (unit = 38, file = 'uex_grid.dat')
-         open (unit = 41, file = 'movie/vort_path.m')
-         open (unit = 42, file = 'movie/geo_3d.m')
-         open (unit = 43, file = 'movie/ugrid.dat')
-         open (unit = 51, file = 'movie/isl_grid.dat')
-         open (unit = 52, file = 'movie/targets.m')
-         open (unit = 53, file = 'movie/stereo_targets.m')
+c Open output file for vortex path
+         open (unit = 41, file = 'vort_path.m')
+c
+c if making a movie (this is not debugged right now!)
+         make_movie = .false.
+         if (make_movie) then
+            open (unit = 37, file = 'movie/u_movie.m')
+         end if
+c
+c set debug = .true. if running the spherical cap case
+         debug = .true.
 c
 c Read hole geometry data
          call READ_DATA (k, nd, nbk, nth, nphi, ak, bk, cx, cy, cz, 
      1                   th_k, phi_k, nvort, x1_vort, x2_vort, x3_vort,
      2                   vort_k, gamma_tot, r0, zeta_k, dt, ntime)
-         call DCFFTI (nd, wsave)
 c
-c Construct hole geometry and grid on surface of sphere
+c Construct boundary geometry on surface of sphere
          call MAKE_GEO (k, nd, nbk, ak, bk, th_k, phi_k, xs, ys, zs,
-     1                  dx, dy, dz, d2x, d2y, d2z, xn, yn, zn, dsda, 
-     2                  diag)
+     1                  dx, dy, dz, d2x, d2y, d2z)
 c
 c Get stereo graphic projection
          call STEREO (k, nd, nbk, xs, ys, zs, dx, dy, dz, d2x, d2y, d2z,
-     1                zeta, dzeta, x_zeta, y_zeta, diag_stereo, 
-     2                nvort, x1_vort, x2_vort, x3_vort, zk_vort) 
+     1                zeta, dzeta, x_zeta, y_zeta, diag, nvort, x1_vort, 
+     2                x2_vort, x3_vort, zk_vort) 
          call RSCPLOT (zk_vort, nvort, 1, 41)
 c
 c Construct grid on surface of sphere
-         call SURFACE_GRID (k, nd, nbk, nth, nphi, ak, bk, cx, cy, cz, 
-     1                      th_k, phi_k, th_gr, phi_gr, x_gr, y_gr,
-     2                      z_gr, zeta_gr, xzeta_gr, yzeta_gr, igrid,
-     3                      alph_gr, xtar, ytar, ztar, ntar)
-ccc         call TARGET_POINTS (k, nd, nbk, ak, bk, cx, cy, cz, 
-ccc     1                      th_k, phi_k, xtar, ytar, ztar, ntar,
-ccc     2                      xz_tar, yz_tar, zeta_tar)
-            call DUMP (nth, nphi, u_gr, igrid, 0, 31)
-            call DUMP (nth, nphi, x_gr, igrid, 1, 32)
-            call DUMP (nth, nphi, y_gr, igrid, 1, 33)
-            call DUMP (nth, nphi, z_gr, igrid, 1, 34)
-            call DUMP (nth, nphi, xzeta_gr, igrid, 1, 35)
-            call DUMP (nth, nphi, yzeta_gr, igrid, 1, 36)
-ccc         call PRIn2 (' diag_stereo = *', diag_stereo, nbk)
+         call SURFACE_GRID (k, nd, nbk, nth, nphi, ak, bk, th_k, phi_k,  
+     1                      th_gr, phi_gr, x_gr, y_gr, z_gr, zeta_gr, 
+     2                      xzeta_gr, yzeta_gr, igrid, alph_gr)
+         if (debug) then
+            call TARGET_POINTS (k, nd, nbk, ak, bk, th_k, phi_k, ntar,
+     2                          xz_tar, yz_tar, zeta_tar)
+            ntime = 1
+         end if
 c
 c Time loop for vortex path
          tbeg = etime(timep)
-ccc         dt = 0.0001d0
-ccc         ntime =  1
          do it = 1, ntime
             time = it*dt  
             call PRIN2 (' TIME = *', time, 1)       
 c
 c Construct the RHS and solve
-         call PRINI (6,13)
-         call GETRHS (k, nd, nbk, cx, cy, cz, zeta_k, zeta, rhs,
-     1                nvort, vort_k, zk_vort, gamma_tot)
-ccc         call PRIN2 (' rhs = *', rhs, nbk)
-         call SOLVE (nd, k, kmax, nbk, rhs, soln, density, A_k, gmwork, 
-     1               lrwork, igwork, liwork, maxl, dzeta)
+            call PRINI (6,13)
+            call GETRHS (k, nd, nbk, zeta_k, zeta, rhs, nvort, vort_k, 
+     1                   zk_vort, gamma_tot)
+            call SOLVE (nd, k, kmax, nbk, rhs, density, A_k,  
+     1                  gmwork, lrwork, igwork, liwork, maxl)
 c
 c Construct solution on surface grid
 ccc         call SOL_GRID (nd, k, nbk, nth, nphi, density, A_k, zeta_k,   
@@ -163,21 +146,21 @@ ccc         call SOL_GRID_FMM (nd, k, nbk, nth, nphi, density, A_k, zeta_k,
 ccc     1                      zeta, dzeta, igrid, zeta_gr, u_gr,
 ccc     2                      x_zeta, y_zeta, qa, cfield, poten, nsp, 
 ccc     3                      wksp, nvort, vort_k, zk_vort, gamma_tot)
-ccc         call SOL_TAR_FMM (nd, k, nbk, ntar, density, A_k, zeta_k,   
-ccc     1                     x_zeta, y_zeta, zeta, dzeta, zeta_tar, u_tar,
-ccc     2                     xz_tar, yz_tar, qa, cfield, poten, nsp, 
-ccc     3                     wksp, nvort, vort_k, zk_vort, gamma_tot)
+         if (debug) then
+            call SOL_TAR_FMM (nd, k, nbk, ntar, density, zeta_k,   
+     1                        zeta, dzeta, xz_tar, yz_tar, u_tar, xat,  
+     2                        yat, qa, cfield, poten, nsp, wksp, nvort, 
+     3                        vort_k, zk_vort, gamma_tot)
 c
-c for a vortex in presence of cap with radius r0, check solution
-ccc         call SOL_VORT_CHECK (nd, k, nbk, nth, nphi, nvort, zeta_gr,  
-ccc     1                        igrid, u_gr, uex_gr, zk_vort, r0)
-ccc         call CHECK_ERROR_TAR (nd, k, nbk, ntar, zeta_k, zeta_tar,  
-ccc     1                         u_tar, nvort, vort_k, zk_vort, r0)
-ccc            call DUMP_MOVIE_ALL (nth, nphi, time, u_gr, it, 37)
-ccc            call DUMP_MOVIE_VORT (nth, nphi, time, zk_vort(1), u_gr, 
-ccc     1                            it, 37)
-ccc          end if
-ccc            call DUMP (nth, nphi, uex_gr, igrid, 1, 38)
+c          for a vortex in presence of cap with radius r0, check solution
+            call CHECK_ERROR_TAR (nd, k, nbk, ntar, zeta_k, zeta_tar,  
+     1                            u_tar, nvort, vort_k, zk_vort, r0)
+         end if
+         if (make_movie) then
+            call DUMP_MOVIE_ALL (nth, nphi, time, u_gr, it, 37)
+            call DUMP_MOVIE_VORT (nth, nphi, time, zk_vort(1), u_gr, 
+     1                            it, 37)
+         end if
 c
 c Calculate velocity at a point
          call CALC_VEL (k, nd, nbk, nvort, density, gamma_tot, zeta,  
@@ -186,38 +169,12 @@ c Calculate velocity at a point
             zk_vort(ivort) = zk_vort(ivort) + dt*zvel(ivort)
          end do
          call PRIn2 (' zk_vort = *', zk_vort, 2*nvort)
-         if (mod(it,50).eq.0) then
+         if (mod(it,1).eq.0) then
             call RSCPLOT (zk_vort, nvort, 1, 41)
          end if
          end do
          tend = etime(timep)
          call PRIN2 (' TOTAL CPU TIME = *', tend-tbeg, 1)
-            call DUMP (nth, nphi, u_gr, igrid, 1, 43)
-c
-c calculate 
-c
-c Check error in solution
-ccc         call CHECK_ERROR (nd, k, nbk, nth, nphi, zeta_k, igrid, 
-ccc     1                     zeta_gr, u_gr)
-ccc         call CHECK_ERROR_TAR (nd, k, nbk, ntar, zeta_k, zeta_tar,  
-ccc     1                         u_tar)
-c
-c dump out density
-         pi = 4.d0*datan(1.d0)
-         do i = 1, nd
-            alpha(i) = 2*pi*(i-1)/nd
-         end do
-         do kbod = 1, k
-            call RSPLOT (alpha, density((kbod-1)*nd+1), nd, 1, 21)
-         end do
-c
-         close (31)
-         close (32)
-         close (33)
-         close (34)
-         close (35)
-         close (36)
-         close (37)
 c
       stop
       end
@@ -230,6 +187,25 @@ c
      2                      x3_vort, vort_k, gamma_tot, r0, zeta_k, dt,
      3                      ntime)
 c---------------
+c OUTPUT
+c	k 	= number of contours
+c	nd	= number of points per contour
+c	nbk 	= total size of system	
+c	nth,nphi
+c		= dimensions of grid for plotting
+c	ak,bk	= major/minor axis of ellipse
+c	(th_k, 	= location of hole centre in spherical coordinates
+c       phi_k)
+c	(cx,cy,cz)
+c		= location of centre in physical coordinates
+c       vort_k	= strength of kth vortex
+c	gamma_tot
+c		= sum of vortex strengths
+c	r0	= radius of spherical cap (for debugging)
+c	zeta_k	= hole centres in stereographic plane
+c	dt	= time step size	
+c	ntime	= number of time steps to take
+c
       implicit real*8 (a-h,o-z)
       dimension ak(*), bk(*), cx(*), cy(*), cz(*), th_k(*), phi_k(*)
       dimension x1_vort(*), x2_vort(*), x3_vort(*), vort_k(*)
@@ -260,6 +236,9 @@ c
      1                     x2_vort(ivort), x3_vort(ivort))
             gamma_tot = gamma_tot + vort_k(ivort)
          end do
+         close(12)
+c
+c initialize plotting outputs (6 is to screen, 13 is to fort.13)
          call PRINI (6,13) 
          call PRIN2 (' ak = *', ak, k)
          call PRIN2 (' bk = *', bk, k)
@@ -275,16 +254,13 @@ c
          r0 = ak(1)/(1.d0-dsqrt(1.d0-(ak(1))**2))
          call PRIN2 (' r0 = *', r0, 1)
 c
-c a fudge for pole
-ccc         call SPH2CART (0.d0, 1.4d0, 1.d0, cx(1), cy(1), cz(1))
+c be careful if one of the hole centres is at the north pole
+c if it is, nudge it a little
          eps = 1.d-6
          do kbod = 1, k
             check = dabs(cz(kbod)-1.d0)
-c
-c be careful if one of the hole centres is at the north pole
-c if it is, nudge it a little
             if (check.lt.eps) then
-               cz_s = 0.99d0
+               cz_s = 0.999d0
                cx_s = dsqrt(0.5d0*(1-cz_s**2))
                cy_s = cx_s
                zeta_k(kbod) = (cx_s + eye*cy_s)/(1.d0-cz_s)
@@ -301,7 +277,6 @@ c if it is, nudge it a little
          end do
          call PRIN2 (' zeta_k = *', zeta_k, 2*k)
 c
-         close(12)
 c
       return
       end
@@ -316,6 +291,30 @@ c
          x = r*dcos(phi)*dcos(theta)
          y = r*dcos(phi)*dsin(theta)
          z = r*dsin(phi)
+c
+      return
+      end      
+c
+c
+c********1*********2*********3*********4*********5*********6*********7**
+c
+      subroutine R_FUNC (alpha, A, B, th, phi, x, y, z)
+c---------------
+      implicit real*8 (a-h,o-z)
+      dimension zaxis(3), xaxis(3), yaxis(3)
+c
+         pi = 4.d0*datan(1.d0)
+c
+         call SPH2CART (th, phi, 1.d0, zaxis(1), zaxis(2), zaxis(3))
+         call SPH2CART (th, phi-0.5d0*pi, 1.d0, xaxis(1), xaxis(2), 
+     1                  xaxis(3))
+         call CROSS (zaxis, xaxis, yaxis)
+         xp = A*dcos(alpha)
+         yp = B*dsin(alpha)
+         zp = dsqrt(1.d0 - xp**2 - yp**2)
+         x = xp*xaxis(1) + yp*yaxis(1) + zp*zaxis(1)
+         y = xp*xaxis(2) + yp*yaxis(2) + zp*zaxis(2)
+         z = xp*xaxis(3) + yp*yaxis(3) + zp*zaxis(3)
 c
       return
       end      
@@ -354,32 +353,10 @@ c
 c
 c********1*********2*********3*********4*********5*********6*********7**
 c
-      subroutine R_FUNC (alpha, A, B, th, phi, x, y, z)
-c---------------
-      implicit real*8 (a-h,o-z)
-      dimension zaxis(3), xaxis(3), yaxis(3)
-c
-         pi = 4.d0*datan(1.d0)
-c
-         call SPH2CART (th, phi, 1.d0, zaxis(1), zaxis(2), zaxis(3))
-         call SPH2CART (th, phi-0.5d0*pi, 1.d0, xaxis(1), xaxis(2), 
-     1                  xaxis(3))
-         call CROSS (zaxis, xaxis, yaxis)
-         xp = A*dcos(alpha)
-         yp = B*dsin(alpha)
-         zp = dsqrt(1.d0 - xp**2 - yp**2)
-         x = xp*xaxis(1) + yp*yaxis(1) + zp*zaxis(1)
-         y = xp*xaxis(2) + yp*yaxis(2) + zp*zaxis(2)
-         z = xp*xaxis(3) + yp*yaxis(3) + zp*zaxis(3)
-c
-      return
-      end      
-c
-c
-c********1*********2*********3*********4*********5*********6*********7**
-c
       subroutine DR_FUNC (alpha, A, B, th, phi, dx, dy, dz)
 c---------------
+c DR_FUNC and D2R_FUNC should really not be in two separate subroutines
+c
       implicit real*8 (a-h,o-z)
       dimension zaxis(3), xaxis(3), yaxis(3)
 c
@@ -436,14 +413,27 @@ c
 c********1*********2*********3*********4*********5*********6*********7**
 c
       subroutine MAKE_GEO (k, nd, nbk, ak, bk, th_k, phi_k, xs, ys, zs,
-     1                     dx, dy, dz, d2x, d2y, d2z, xn, yn, zn, dsda, 
-     2                     diag)
+     1                     dx, dy, dz, d2x, d2y, d2z)
 c---------------
+c INPUT
+c	k 	= number of contours
+c	nd	= number of points per contour
+c	nbk 	= total size of system	
+c	ak,bk	= major/minor axis of ellipse
+c	(th_k, 	= location of hole centre in spherical coordinates
+c       phi_k)
+c OUTPUT
+c	(xs,ys,zs)	
+c		= coordinates of each point on boundary
+c	(dx,dy,dz)			
+c		= derivative wrt parametrization
+c	(d2x,d2y,d2z)
+c		= 2nd derivative wrt parametrization
+c
       implicit real*8 (a-h,o-z)
-      dimension ak(k), bk(k), th_k(k), phi_k(k), r(3), t(3), pn(3),
-     1          vn(3), diag(nbk), d2x(nbk), d2y(nbk), d2z(nbk)
-      dimension xs(nbk), ys(nbk), zs(nbk), dx(nbk), dy(nbk), dz(nbk),
-     1          xn(nbk), yn(nbk), zn(nbk), dsda(nbk)
+      dimension ak(k), bk(k), th_k(k), phi_k(k), d2x(nbk), d2y(nbk), 
+     1          d2z(nbk)
+      dimension xs(nbk), ys(nbk), zs(nbk), dx(nbk), dy(nbk), dz(nbk)
 c
          pi = 4.d0*datan(1.d0)
 c
@@ -458,47 +448,21 @@ c
                call DR_FUNC (alpha, ak(kbod), bk(kbod), th_k(kbod), 
      1                      phi_k(kbod), dx(istart+i), dy(istart+i), 
      2                      dz(istart+i))
-c
-c Construct normal to surface of sphere
-               r(1) = xs(istart+i)
-               r(2) = ys(istart+i)
-               r(3) = zs(istart+i)
-c
-c Construct tangent to curve lying in plane of sphere
-               t(1) = dx(istart+i)
-               t(2) = dy(istart+i)
-               t(3) = dz(istart+i)
-               dsda(istart+i) = dsqrt((t(1))**2 + (t(2))**2 + (t(3))**2)
-               do j = 1, 3
-                  t(j) = t(j)/dsda(istart+i)
-               end do
-c
-c Construct normal to curve lying in plane of sphere
-               call CROSS (t,r,vn)
-               xn(istart+i) = vn(1)
-               yn(istart+i) = vn(2)
-               zn(istart+i) = vn(3)
-c
-c Construct the diagonal entry
                call D2R_FUNC (alpha, ak(kbod), bk(kbod), th_k(kbod), 
-     1                        phi_k(kbod), pn(1), pn(2), pn(3))
-               d2x(istart+i) = pn(1)
-               d2y(istart+i) = pn(2)
-               d2z(istart+i) = pn(3)
-               pn(1) = pn(1)/(dsda(istart+i))**2
-               pn(2) = pn(2)/(dsda(istart+i))**2
-               pn(3) = pn(3)/(dsda(istart+i))**2
-               call CROSS(pn,r,vn)
-               call DOT (t,vn,t_dot_vn)
-               diag(istart+i) = -t_dot_vn*dsda(istart+i)/(4.d0*pi)
+     1                        phi_k(kbod), d2x(istart+i), d2y(istart+i),
+     2                        d2z(istart+i))
             end do
             istart = istart + nd
          end do
+c
+c dump out for matlab plotting
+         open (unit = 42, file = 'geo_3d.m')
          is = 1
          do kbod = 1, k
             call RS_3D_PLOT (xs(is),ys(is),zs(is), nd, 1, 42)
             is = is + nd
          end do
+         close(42)
 c
       return
       end      
@@ -536,32 +500,58 @@ c
 c
 c********1*********2*********3*********4*********5*********6*********7**
 c
-      subroutine SURFACE_GRID (k, nd, nbk, nth, nphi, ak, bk, cx, cy,  
-     1                         cz, th_k, phi_k, th_gr, phi_gr, x_gr, 
-     2                         y_gr, z_gr, zeta_gr, xzeta_gr, yzeta_gr,
-     3                         igrid, alph_gr, xtar, ytar, ztar, ntar)
+      subroutine SURFACE_GRID (k, nd, nbk, nth, nphi, ak, bk, th_k, 
+     1                         phi_k, th_gr, phi_gr, x_gr, y_gr, z_gr, 
+     2                         zeta_gr, xzeta_gr, yzeta_gr, igrid, 
+     3                         alph_gr)
 c---------------
+c Constructs grid points on surface of sphere for plotting solution
+c in domain
+c INPUT
+c	k 	= number of contours
+c	nd	= number of points per contour
+c	nbk 	= total size of system	
+c	(nth,nphi)
+c		= number of grid points in theta and phi directions
+c	ak,bk 	= major/minor axes of ellipses
+c	(th_k,phi_k)	
+c		= hole centres in spherical coordinates
+c OUTPUT
+c	(th_gr,phi_gr)	
+c		= (theta,phi) values at grid points
+c	(x_gr,y_gr,z_gr)			
+c		= (x,y,z) values at grid points (on sphere)
+c	zeta_gr	= grid point locations in stereographic plane	
+c		= xzeta_gr + i yzeta_gr
+c	igrid(i,j)	
+c		= 1 if (i,j)th point is in domain, 0 otherwise
+c	alph_gr	= ignore this - might be used for matlab plotting
+c 
       implicit real*8 (a-h,o-z)
-      dimension ak(k), bk(k), cx(k), cy(k), cz(k), th_k(k), phi_k(k)
+      dimension ak(k), bk(k), th_k(k), phi_k(k)
       dimension igrid(nth,nphi), th_gr(nth,nphi), phi_gr(nth,nphi),
      1          x_gr(nth,nphi), y_gr(nth,nphi), z_gr(nth,nphi),
      2          xzeta_gr(nth,nphi), yzeta_gr(nth,nphi), 
      3          alph_gr(nth,nphi)
-      dimension xtar(*), ytar(*), ztar(*)
       complex*16 zeta_gr(nth,nphi), eye
 c
          pi = 4.d0*datan(1.d0)
          eye = dcmplx(0.d0,1.d0)
 c
-c Calculate epsilon
+c Calculate epsilon, which determines a buffer zone between boundary
+c and grid points considered in the domain (i.e. it ensures target 
+c points don't get too close to boundary where quadrature breaks down)
          radmax = 0.d0
          do kbod = 1, k
             radmax = max(radmax, dabs(ak(kbod)))
             radmax = max(radmax, dabs(bk(kbod)))
          end do
          call PRIN2 (' maximum radius = *', radmax, 1)
-         eps = 2*2.d0*pi*radmax/nd
-ccc         eps = 0.05d0
+c
+c for accuracy, choose nfac to be 5 or higher. Smaller values are better
+c for plotting purposes only
+         nfac = 2
+         eps = nfac*2.d0*pi*radmax/nd
          call PRIN2 (' Epsilon = *', eps, 1) 
 c
          dth = 2.d0*pi/nth
@@ -604,8 +594,25 @@ c
             end do
          end do 
 c
-         open (unit = 21, file = 'zeta_grid.m')
-         call RSCPLOT (zeta_gr, nth*nphi, 1, 21)
+c dump out for matlab plotting
+         open (unit = 31, file = 'igrid.dat')
+         open (unit = 32, file = 'xgrid.dat')
+         open (unit = 33, file = 'ygrid.dat')
+         open (unit = 34, file = 'zgrid.dat')
+         open (unit = 35, file = 'xzeta_grid.dat')
+         open (unit = 36, file = 'yzeta_grid.dat')
+            call DUMP (nth, nphi, x_gr, igrid, 0, 31)
+            call DUMP (nth, nphi, x_gr, igrid, 1, 32)
+            call DUMP (nth, nphi, y_gr, igrid, 1, 33)
+            call DUMP (nth, nphi, z_gr, igrid, 1, 34)
+            call DUMP (nth, nphi, xzeta_gr, igrid, 1, 35)
+            call DUMP (nth, nphi, yzeta_gr, igrid, 1, 36)
+         close(31)
+         close(32)
+         close(33)
+         close(34)
+         close(35)
+         close(36)
 c
       return
       end      
@@ -613,13 +620,29 @@ c
 c
 c********1*********2*********3*********4*********5*********6*********7**
 c
-      subroutine TARGET_POINTS (k, nd, nbk, ak, bk, cx, cy, cz, 
-     1                          th_k, phi_k, xtar, ytar, ztar, ntar,
-     2                          xz_tar, yz_tar, zeta_tar)
+      subroutine TARGET_POINTS (k, nd, nbk, ak, bk, th_k, phi_k, 
+     1                          xz_tar, yz_tar, zeta_tar)
 c---------------
+c Same idea as SURFACE_GRID, except far fewer points and epsilon
+c is fixed (and relatively large)
+c INPUT
+c	k 	= number of contours
+c	nd	= number of points per contour
+c	nbk 	= total size of system	
+c	(nth,nphi)
+c		= number of grid points in theta and phi directions
+c	ak,bk 	= major/minor axes of ellipses
+c	(th_k,phi_k)	
+c		= hole centres in spherical coordinates
+c OUTPUT
+c       ntar 	= number of target points
+c	zeta_tar	
+c		= target point locations in stereographic plane	
+c		= xzeta_gr + i yzeta_gr
+c 
       implicit real*8 (a-h,o-z)
-      dimension ak(k), bk(k), cx(k), cy(k), cz(k), th_k(k), phi_k(k)
-      dimension xtar(*), ytar(*), ztar(*), xz_tar(*), yz_tar(*)
+      dimension ak(k), bk(k), th_k(k), phi_k(k)
+      dimension xz_tar(*), yz_tar(*)
       complex*16 zeta, eye, zeta_tar(*)
 c
          pi = 4.d0*datan(1.d0)
@@ -658,17 +681,16 @@ c
                end do
                if (in_out.eq.0) then
                   ntar = ntar+1
-                  xtar(ntar) = x
-                  ytar(ntar) = y
-                  ztar(ntar) = z
                   zeta_tar(ntar) = zeta
                   xz_tar(ntar) = xzeta
                   yz_tar(ntar) = yzeta
                end if
             end do
          end do 
-c
-c blah
+         call PRINF (' ntar = *', ntar, 1)
+cccc
+cccc Can also pick a circular contour within the domain as the target 
+cccc points
 ccc         ntar = 20
 ccc         dth = 2.d0*pi/ntar
 ccc         do i = 1, ntar
@@ -678,8 +700,9 @@ ccc            xz_tar(i) = dreal(zeta_tar(i))
 ccc            yz_tar(i) = dimag(zeta_tar(i))
 ccc         end do
 c
+         open (unit = 53, file = 'targets_stereo.m')
          call RSCPLOT (zeta_tar, ntar, 1, 53)
-         call RS_3D_PLOT (xtar, ytar, ztar, ntar, 1, 52)
+         close(53)
 c
       return
       end      
@@ -689,9 +712,30 @@ c
 c********1*********2*********3*********4*********5*********6*********7**
 c
       subroutine STEREO (k, nd, nbk, xs, ys, zs, dx, dy, dz, d2x, d2y,  
-     1                   d2z, zeta, dzeta, x_zeta,y_zeta, diag, 
+     1                   d2z, zeta, dzeta, x_zeta, y_zeta, diag, 
      2                   nvort, x1_vort, x2_vort, x3_vort, zk_vort)
 c---------------
+c Constructs geometry of boundaries in stereographic plane
+c INPUT
+c	k 	= number of contours
+c	nd	= number of points per contour
+c	nbk 	= total size of system	
+c	(xs,ys,zs)	
+c		= coordinates of each point on boundary
+c	(dx,dy,dz)			
+c		= derivative wrt parametrization
+c	(d2x,d2y,d2z)
+c		= 2nd derivative wrt parametrization
+c	nvort	= number of point vortices
+c	(x1_vort,y1_vort,z1_vort)	
+c		= coordinates of vortices on sphere
+c OUTPUT
+c	zeta = x_zeta + i y_zeta
+c		= boundary points in stereographic plane
+c 	dzeta	= derivative of zeta wrt parametrization oriented
+c		  carefully for evaluation of Cauchy integrals
+c	diag	= self-interacting term in integral operator
+c
       implicit real*8 (a-h,o-z)
       dimension xs(nbk), ys(nbk), zs(nbk), dx(nbk), dy(nbk), dz(nbk),
      1          x_zeta(nbk), y_zeta(nbk), d2x(nbk), d2y(nbk), d2z(nbk),
@@ -719,59 +763,24 @@ c
             zextra = dzeta(i)*dconjg(zeta(i))/(1.d0+cdabs(zeta(i))**2)
             zextra = zextra/(2.d0*pi)
             diag(i) = 0.25d0*rkappa*ds/pi - dimag(zextra)
-ccc            diag(i) = 0.25d0*rkappa*ds/pi 
          end do
          do ivort = 1, nvort
             zk_vort(ivort) = (x1_vort(ivort) + eye*x2_vort(ivort))/
      1                       (1.d0 - x3_vort(ivort))
          end do
+c
+c dump out for matlab plotting
+         open (unit = 11, file = 'geo_stereo.m')
+         open (unit = 22, file = 'vortex_stereo.m')
          call RSCPLOT (zk_vort, nvort, 1, 22)
          do kbod = 1, k
             call RSCPLOT (zeta((kbod-1)*nd+1), nd, 1, 11)
          end do
+         close(11)
+         close(22)
 c
       return
       end      
-c
-c
-c********1*********2*********3*********4*********5*********6*********7**
-c
-      subroutine GEO_INIT (nphi, nth, n, theta, phi, x1, x2, x3, z, q)
-c---------------
-      implicit real*8 (a-h,o-z)
-      dimension theta(*), phi(*), x1(*), x2(*), x3(*)
-      complex*16 q(*), z(*), eye
-c
-         pi = 4.d0*datan(1.d0)
-         eye = dcmplx(0.d0,1.d0)
-c         
-         nth = 1
-         nphi = 50
-         n = nth*nphi
-         dth = 0.5d0*pi/nth
-         dphi = 2.d0*pi/nphi
-c         
-         istart = 0
-         do i = 1, nth
-            th = 0.25d0*pi + (i-1)*dth
-            do j = 1, nphi
-               theta(istart+j) = th
-               ph = (j-1)*dphi
-               phi(istart+j) = ph
-               x1(istart+j) = dcos(ph)*dsin(th)
-               x2(istart+j) = dsin(ph)*dsin(th)
-               x3(istart+j) = dcos(th)
-               z(istart+j) = (x1(istart+j) + eye*x2(istart+j))/
-     1                         (1 - x3(istart+j))
-               q(istart+j) = 1.d0
-            end do
-            istart = istart+nphi
-         end do
-c
-         call PRINI (6,13)
-c
-      return
-      end
 c
 c
 c********1*********2*********3*********4*********5*********6*********7**
@@ -819,15 +828,27 @@ c
 c
 c********1*********2*********3*********4*********5*********6*********7**
 c
-      subroutine GETRHS (k, nd, nbk, cx, cy, cz, zeta_k, zeta, rhs,
-     1                   nvort, vort_k, zk_vort, gamma_tot)
+      subroutine GETRHS (k, nd, nbk, zeta_k, zeta, rhs, nvort, vort_k, 
+     1                   zk_vort, gamma_tot)
 c---------------
 c represent psi = psi^* + sum vortices + A G(zeta,zeta_k(1))
 c boundary conditions for psi^* are 
 c    psi^* = -sum vortices - A G(zeta,zeta_k(1))
+c INPUT
+c	k 	= number of contours
+c	nd	= number of points per contour
+c	nbk 	= total size of system	
+c       zeta_k	= hole centres in stereographic plane
+c	nvort 	= number of vortices
+c	vort_k	= vortex strength
+c	zk_vort	= vortex locations in stereographic plane
+c	gamma_tot
+c		= sum of vortex strengths
+c OUTPUT
+c	rhs	= boundary conditions according to expression above
+c
       implicit real*8 (a-h,o-z)
-      dimension cx(k), cy(k), cz(k), rhs(nbk), xs(nbk), ys(nbk), 
-     1          zs(nbk), vort_k(nvort)
+      dimension rhs(nbk), vort_k(nvort)
       complex*16 zeta_k(k), eye, zeta(nbk), zk_vort(nvort)
 c
          eye = dcmplx(0.d0,1.d0)
@@ -857,350 +878,8 @@ c
 c
 c********1*********2*********3*********4*********5*********6*********7**
 c
-      subroutine MATVEC_SPHERE (k, nd, nbk, xs, ys, zs, xn, yn, zn,
-     1                          dsda, diag, cx, cy, cz, A_k, u, w)
-c---------------
-      implicit real*8 (a-h,o-z)
-      dimension u(nbk), xs(nbk), ys(nbk), zs(nbk), xn(nbk), yn(nbk),
-     1          zn(nbk), diag(nbk), w(nbk), dsda(nbk), cx(k), cy(k),
-     2          cz(k), A_k(k)
-      dimension gradu(3), vn(3), R0(3), R(3), delR(3)
-c
-         pi = 4.d0*datan(1.d0)
-         dalph = 2.d0*pi/nd
-c
-c
-c Extract off A_k
-         do kbod = 1, k
-            A_k(kbod) = u(nbk+kbod)
-         end do
-c
-         do i = 1, nbk
-            w(i) = 0.d0
-            R0(1) = xs(i)
-            R0(2) = ys(i)
-            R0(3) = zs(i)
-            do j = 1, nbk
-               if (i.ne.j) then  
-                  vn(1) = xn(j)
-                  vn(2) = yn(j)
-                  vn(3) = zn(j)
-                  R(1) = xs(j)
-                  R(2) = ys(j)
-                  R(3) = zs(j)
-                  do ik = 1, 3
-                     delR(ik) = R(ik) - R0(ik)
-                  end do
-                  call DOT (delR, delR, rad2)
-                  call DOT (delR, vn, du_dn)
-                   du_dn = du_dn/rad2
-                   du = dalph*u(j)*du_dn*dsda(j)/(2.d0*pi)
-ccc               aKu(i) = aKu(i) - dalph*qa(j)*du_dn*dsda(j)/(2.d0*pi)
-                  w(i) = w(i) +
-     1                       dalph*u(j)*du_dn*dsda(j)/(2.d0*pi)
-                else
-                  w(i) = w(i) + 0.5d0*u(i) - dalph*u(i)*diag(i)
-               end if
-               do kbod = 1, k
-                  R(1) = cx(kbod)
-                  R(2) = cy(kbod)
-                  R(3) = cz(kbod)
-                  do ik = 1, 3
-                     delR(ik) = R(ik) - R0(ik)
-                  end do
-                  call DOT (delR, delR, rad2)
-                  w(i) = w(i) + A_k(kbod)*dlog(dsqrt(rad2/2.d0))
-               end do
-            end do
-         end do
-c
-c
-c Constraints for multiple log but with same-valued streamlines
-         w(nbk+1) = 0.d0
-         do kbod = 1, k
-            w(nbk+1) = w(nbk+1) + A_k(kbod)
-         end do
-         do kbod = 2, k
-            w(nbk+kbod) = 0.d0
-            do i = (kbod-1)*nd+1, kbod*nd
-               w(nbk + kbod) = w(nbk + kbod) + u(i)*dsda(i)
-            end do
-         end do 
-c
-      return
-      end
-c
-c
-c********1*********2*********3*********4*********5*********6*********7**
-c
-      subroutine BUILD_MAT_SPHERE (k, nd, nbk, xs, ys, zs, xn, yn, zn,
-     1                             dsda, diag, cx, cy, cz, amat)
-c---------------
-      implicit real*8 (a-h,o-z)
-      dimension xs(nbk), ys(nbk), zs(nbk), xn(nbk), yn(nbk),
-     1          zn(nbk), diag(nbk), dsda(nbk), cx(k), cy(k),
-     2          cz(k), amat(nbk+k,nbk+k)
-      dimension gradu(3), vn(3), R0(3), R(3), delR(3)
-c
-         pi = 4.d0*datan(1.d0)
-         dalph = 2.d0*pi/nd
-c
-         do i = 1, nbk
-            R0(1) = xs(i)
-            R0(2) = ys(i)
-            R0(3) = zs(i)
-            do j = 1, nbk
-               if (i.ne.j) then  
-                  vn(1) = xn(j)
-                  vn(2) = yn(j)
-                  vn(3) = zn(j)
-                  R(1) = xs(j)
-                  R(2) = ys(j)
-                  R(3) = zs(j)
-                  do ik = 1, 3
-                     delR(ik) = R(ik) - R0(ik)
-                  end do
-                  call DOT (delR, delR, rad2)
-                  call DOT (delR, vn, du_dn)
-                   du_dn = du_dn/rad2
-ccc               aKu(i) = aKu(i) - dalph*qa(j)*du_dn*dsda(j)/(2.d0*pi)
-                  amat(i,j) = dalph*du_dn*dsda(j)/(2.d0*pi)
-                else
-                  amat(i,i) =  0.5d0 - dalph*diag(i)
-               end if
-               do kbod = 1, k
-                  R(1) = cx(kbod)
-                  R(2) = cy(kbod)
-                  R(3) = cz(kbod)
-                  do ik = 1, 3
-                     delR(ik) = R(ik) - R0(ik)
-                  end do
-                  call DOT (delR, delR, rad2)
-                  amat(i,nbk+kbod) = dlog(dsqrt(rad2/2.d0))
-               end do
-            end do
-         end do
-c
-c
-c Constraints for multiple log but with same-valued streamlines
-         do kbod = 1, k
-            amat(nbk+1,nbk+kbod) = 1.d0 
-         end do
-         do kbod = 2, k
-            do i = (kbod-1)*nd+1, kbod*nd
-               amat(nbk+kbod,i) = dsda(i)
-            end do
-         end do 
-c
-c Dump it out
-         open (unit = 24, file = 'amat_sphere.dat')
-         do i = 1, nbk+k
-            do j = 1, nbk+k
-               write(24,'(e20.13,$)')(amat(i,j))
-               write (24,'(a)')  ''
-            end do
-         end do
-         close (24) 
-c
-      return
-      end
-c
-c
-c********1*********2*********3*********4*********5*********6*********7**
-c
-      subroutine MATVEC_STEREO (k, nd, nbk, qa, zeta, zs, dx, dy, dz,
-     1                          dsda, diag, aKu)
-c---------------
-      implicit real*8 (a-h,o-z)
-      dimension qa(nbk), dx(nbk), dy(nbk), dz(nbk), diag(nbk), 
-     1          aKu(nbk), dsda(nbk), zs(nbk)
-      dimension gradu(3), vn(3), R0(3), R(3), delR(3)
-      complex*16 zeta(nbk), dzeta, zdis, eye, zkern
-c
-         pi = 4.d0*datan(1.d0)
-         eye = dcmplx(0.d0,1.d0)
-         dalph = 2.d0*pi/nd
-c
-         do i = 1, nbk
-            aKu(i) = 0.d0
-            do j = 1, i-1
-               zdis = zeta(j) - zeta(i)
-               dzeta = (dx(j) + eye*dy(j) + zeta(j)*dz(j))/(1.d0-zs(j))
-ccc               zkern = dzeta/zdis 
-               zkern = dzeta/zdis - dconjg(zeta(j))*dzeta
-     1                   /(1.d0+cdabs(zeta(j))**2)
-               aKu(i) = aKu(i) - dalph*qa(j)*dimag(zkern)/(2.d0*pi)
-            end do
-            do j = i+1, nbk
-               zdis = zeta(j) - zeta(i)
-               dzeta = (dx(j) + eye*dy(j) + zeta(j)*dz(j))/(1.d0-zs(j))
-ccc               zkern = dzeta/zdis 
-               zkern = dzeta/zdis - dconjg(zeta(j))*dzeta
-     1                   /(1.d0+cdabs(zeta(j))**2)
-               aKu(i) = aKu(i) - dalph*qa(j)*dimag(zkern)/(2.d0*pi)
-            end do
-         end do
-c
-      return
-      end
-c
-c
-c********1*********2*********3*********4*********5*********6*********7**
-c
-      subroutine EXACT_POT (n, nsp, x, y, z, qa, phi)
-c---------------
-      implicit real*8 (a-h,o-z)
-      dimension x(n), y(n), phi(n)
-      complex*16 qa(n), z(n), eye, zdis, z1, z2, zarg
-c
-      REAL*4 TIMEP(2), ETIME
-c
-         tbeg = etime(timep)
-         do i = 1, n
-            phi(i) = 0.d0
-            x(i) = dreal(z(i))
-            y(i) = dimag(z(i))
-            z1 = 1 + (cdabs(z(i)))**2
-            do j = 1, i-1
-               z2 = 1 + (cdabs(z(j)))**2
-               zdis = z(j)-z(i)
-               zarg = zdis*dconjg(zdis)/(z1*z2)
-               phi(i) = phi(i) + real(qa(j)*dlog(cdabs(zarg)))
-            end do
-            do j = i+1, n
-               z2 = 1 + (cdabs(z(j)))**2
-               zdis = z(j)-z(i)
-               zarg = zdis*dconjg(zdis)/(z1*z2)
-               phi(i) = phi(i) + real(qa(j)*dlog(cdabs(zarg)))
-            end do
-         end do
-c
-         tend = etime(timep)
-         call PRIN2 ('TIME FOR DIRECT POTENTIAL = *',tend-tbeg,1)
-c
-      return
-      end
-c
-c
-c********1*********2*********3*********4*********5*********6*********7**
-c
-      subroutine EXACT_FIELD (n, nsp, x, y, z, qa, zfield)
-c---------------
-      implicit real*8 (a-h,o-z)
-      dimension x(n), y(n)
-      complex*16 qa(n), z(n), zfield(n), eye, zdis, z1, z2, zarg
-c
-      REAL*4 TIMEP(2), ETIME
-c
-         do i = 1, n
-            zfield(i) = 0.d0
-            x(i) = dreal(z(i))
-            y(i) = dimag(z(i))
-            do j = 1, i-1
-               zfield(i) = zfield(i) - dconjg(qa(j)/(z(j) - z(i)))
-            end do
-            do j = i+1, n
-               zfield(i) = zfield(i) - dconjg(qa(j)/(z(j) - z(i)))
-            end do
-         end do
-         call PRIN2 (' zfield direct = *', zfield, 2*n)
-c
-         tend = etime(timep)
-c
-      return
-      end
-c
-c
-c********1*********2*********3*********4*********5*********6*********7**
-c
-      subroutine GRADIENT_EX (n, x1, x2, x3, z, qa, phi_1, phi_2, 
-     1                        phi_3, phi_1e, phi_2e, phi_3e)
-c---------------
-      implicit real*8 (a-h,o-z)
-      dimension x1(n), x2(n), x3(n), phi_1(n), phi_2(n), phi_3(n), 
-     1          phi_1e(n), phi_2e(n), phi_3e(n)
-      complex*16 z(n), qa(n), eye, zdis, z1, z2, zarg, dphi_dz
-c
-         do i = 1, n
-            phi_1(i) = 0.d0
-            phi_2(i) = 0.d0
-            phi_3(i) = 0.d0
-            do j = 1, i-1
-               r = (x1(i)-x1(j))**2 + (x2(i)-x2(j))**2 +
-     1             (x3(i)-x3(j))**2
-               phi_1(i) = phi_1(i) + qa(j)*(x1(j)-x1(i))/r
-               phi_2(i) = phi_2(i) + qa(j)*(x2(j)-x2(i))/r
-               phi_3(i) = phi_3(i) + qa(j)*(x3(j)-x3(i))/r
-            end do
-            do j = i+1, n
-               r = (x1(i)-x1(j))**2 + (x2(i)-x2(j))**2 +
-     1             (x3(i)-x3(j))**2
-               phi_1(i) = phi_1(i) + qa(j)*(x1(j)-x1(i))/r
-               phi_2(i) = phi_2(i) + qa(j)*(x2(j)-x2(i))/r
-               phi_3(i) = phi_3(i) + qa(j)*(x3(j)-x3(i))/r
-            end do
-         end do
-         call PRIN2 (' dphi dx1 1 = *', phi_1, n)
-c
-         do i = 1, n
-            phi_1e(i) = 0.d0
-            phi_2e(i) = 0.d0
-            phi_3e(i) = 0.d0
-            do j = 1, i-1
-               dz_dx1 = 1.d0/(1.d0-x3(j))
-               dphi_dz = 1.d0/(z(j)-z(i)) 
-     1                    - dconjg(z(j))/(1.d0+(cdabs(z(j)))**2)
-               phi_1e(i) = phi_1e(i) 
-     1                      + 2.d0*dreal(qa(j)*dphi_dz)*dz_dx1
-            end do
-            do j = i+1, n
-               dz_dx1 = 1.d0/(1.d0-x3(j))
-               dphi_dz = 1.d0/(z(j)-z(i)) 
-     1                    - dconjg(z(j))/(1.d0+(cdabs(z(j)))**2)
-               phi_1e(i) = phi_1e(i) 
-     1                      + 2.d0*dreal(qa(j)*dphi_dz)*dz_dx1
-            end do
-         end do
-         call PRIN2 (' dphi dx1 2 = *', phi_1e, n)
-ccc         call PRIN2 (' dphi dx2 = *', phi_2, n)
-ccc         call PRIN2 (' dphi dx3 = *', phi_3, n)
-c
-         tend = etime(timep)
-c
-      return
-      end
-c
-c
-c********1*********2*********3*********4*********5*********6*********7**
-c
-      subroutine GRAD_BUILD (n, x1, x2, x3, z, cfield, phi_1, phi_2, 
-     1                       phi_3)
-c---------------
-      implicit real*8 (a-h,o-z)
-      dimension x1(n), x2(n), x3(n), phi_1(n), phi_2(n), phi_3(n)
-      complex*16 z(n), cfield(n), eye, zdis, z1, z2, zarg
-c
-         eye = dcmplx(0.d0,1.d0)
-c
-         do i = 1, n
-            phi_1(i) = 2.d0*dreal(cfield(i))/(1.d0-x3(i))
-            phi_2(i) = 2.d0*dreal(eye*cfield(i))/(1.d0-x3(i))
-            phi_3(i) = -2.d0*dreal(z(i)*cfield(i))/(1.d0-x3(i))
-         end do
-         call PRIN2 (' dphi dx1 = *', phi_1, n)
-         call PRIN2 (' dphi dx2 = *', phi_2, n)
-         call PRIN2 (' dphi dx3 = *', phi_3, n)
-c
-         tend = etime(timep)
-c
-      return
-      end
-c
-c
-c********1*********2*********3*********4*********5*********6*********7**
-c
       subroutine  FASMVP (k, nd, nbk, nsp, x_zeta, y_zeta, zeta,    
-     1                    dzeta, zeta_k, diag, dsda, A_k, u, w, qa,   
+     1                    dzeta, zeta_k, diag, A_k, u, w, qa,   
      2                    cfield, poten, wksp)
 c---------------
 c
@@ -1209,7 +888,7 @@ c
       complex*16 zeta(nbk), dzeta(nbk), qa(nbk), cfield(nbk), 
      1           zQsum, zQ2sum, eye, zeta_k(k), zdis
       dimension u(*), w(*), poten(nbk), wksp(nsp), x_zeta(nbk), 
-     1          y_zeta(nbk), diag(nbk), dsda(nbk), A_k(k)
+     1          y_zeta(nbk), diag(nbk), A_k(k)
       REAL*4 TIMEP(2), ETIME
 c
          pi = 4.D0*DATAN(1.D0)
@@ -1356,120 +1035,19 @@ c
       end
 c
 c
-c********1*********2*********3*********4*********5*********6*********7**
-c
-      subroutine  FASMVP_TEST (k, nd, nbk, nsp, x_zeta, y_zeta, zeta,    
-     1                    dzeta, zeta_k, diag, dsda, A_k, u, w, qa,   
-     2                    cfield, poten, wksp)
 c---------------
-c
-      implicit real*8 (a-h, o-z)
-      integer*4 iout(2), inform(10), ierr(10)
-      complex*16 zeta(nbk), dzeta(nbk), qa(nbk), cfield(nbk), 
-     1           zQsum, zQ2sum, eye, zeta_k(k), zdis
-      dimension u(*), w(*), poten(nbk), wksp(nsp), x_zeta(nbk), 
-     1          y_zeta(nbk), diag(nbk), dsda(nbk), A_k(k)
-      REAL*4 TIMEP(2), ETIME
-c
-         pi = 4.D0*DATAN(1.D0)
-         eye = DCMPLX(0.D0,1.D0)
-         dalph = 2.d0*pi/nd
-c
-c Extract off A_k
-         do kbod = 1, k
-            A_k(kbod) = u(nbk+kbod)
-         end do
-c
-         zQsum = 0.d0
-         do i = 1, nbk
-            qa(i) = dalph*u(i)*dzeta(i)/(2.d0*pi)
-            zQ2sum = dalph*u(i)*dzeta(i)*dconjg(zeta(i))
-     1                   /(1.d0+cdabs(zeta(i))**2)
-            zQsum = zQsum - zQ2sum/(2.d0*pi)
-         end do
-ccc         call PRIn2 (' zQsum = *', zQsum, 2)
-c
-         tbeg = etime(timep)
-         iout(1) = 0
-         iout(2) = 13
-         iflag7 = 3
-         napb = 20
-         ninire = 2
-         mex = 300
-         eps7 = 1.d-14
-         tol = 1.d-14
-         nnn = nbk
-         call DAPIF2 (iout, iflag7, nnn, napb, ninire, mex, ierr, 
-     &                inform, tol, eps7, x_zeta, y_zeta, qa, poten,  
-     &                cfield, wksp, nsp, CLOSE)
-         call PRINI (6, 13)
-ccc         call PRIN2 (' qa = *', qa, 2*nnn)
-ccc         call PRIN2 (' cfielf = *', cfield, 2*nnn)
-         if (ierr(1).ne.0) then
-            write (6,*) '  ERROR IN DAPIF2, IERR = ', (ierr(ii),ii=1,6)
-            write(6,*) '  INFORM = ', (inform(ii),ii=1,6)
-            stop
-         end if
-ccc         call PRINF (' Number of Levels used = *', inform(3), 1)
-ccc         call PRIN2 (' cfield = *', cfield, 2*nbk)
-c
-c Fix up field
-         do i = 1, nbk
-            zQ2sum = dalph*u(i)*dzeta(i)*dconjg(zeta(i))
-     1                   /(1.d0+cdabs(zeta(i))**2)
-            zQ2sum = - zQ2sum/(2.d0*pi)
-            cfield(i) = cfield(i) - zQsum + zQ2sum
-            w(i) = 0.5d0*u(i) 
-c
-c Add on log singularities
-            do kbod = 1, k
-ccc            do kbod = 1, 1
-               zdis = zeta(i) - zeta_k(kbod)
-ccc               rad = 4.d0*(cdabs(zdis))**2/((1+(cdabs(zeta(i)))**2)
-ccc     1                  *((1+(cdabs(zeta_k(kbod)))**2)))
-ccc               w(i) = w(i) + A_k(kbod)*0.5d0*dlog(rad)
-               rad = 2.d0*(cdabs(zdis))**2/((1+(cdabs(zeta(i)))**2)
-     1                  *((1+(cdabs(zeta_k(kbod)))**2)))
-               w(i) = w(i) + A_k(kbod)*0.5d0*dlog(rad)
-            end do
-         end do
-c
-c
-c Constraints for multiple log but with same-valued streamlines
-         w(nbk+1) = 0.d0
-         do kbod = 1, k
-            w(nbk+1) = w(nbk+1) + A_k(kbod)
-         end do
-         do kbod = 2, k
-            w(nbk+kbod) = 0.d0
-            do i = (kbod-1)*nd+1, kbod*nd
-               w(nbk + kbod) = w(nbk + kbod) + u(i)
-            end do
-         end do 
-         tend = etime(timep)
-ccc         call PRIN2 (' poten = *', poten, n)
-ccc         call PRIN2 (' TIME FOR FMM  = *',tend-tbeg,1)
-ccc         call PRIN2 (' cfield = *', cfield, 2*n)
-c
-      return
-      end
-c
-c
-c---------------
-      subroutine SOLVE (nd, k, kmax, nbk, rhs, soln, u, A_k, rwork, 
-     1                  lrwork, iwork, liwork, maxl, dzeta)
+      subroutine SOLVE (nd, k, kmax, nbk, rhs, soln, A_k, rwork, 
+     1                  lrwork, iwork, liwork, maxl)
 c---------------
 c
       implicit real*8 (a-h,o-z)
       external MATVEC_LAPL, MSOLVE
 c
 c  System
-      dimension soln(*), rhs(*), u(nbk), A_k(k), dsda(nbk)
+      dimension soln(*), rhs(*), A_k(k)
 c
 c  DGMRES work arrays
-      dimension rwork(lrwork),iwork(liwork)
-c
-      complex*16 dzeta(nbk)
+      dimension rwork(lrwork), iwork(liwork)
 c
 c  Timings
 c
@@ -1491,7 +1069,6 @@ c     parameters for DGMRES
 c
 c  Preconditioner flag
 c
-ccc         iwork(4) = -1
          iwork(4) = 0
 c
 c  Restart flag
@@ -1523,25 +1100,19 @@ c
             tsec = t1 - t0
             call PRIn2 (' time in solve = *', tsec, 1)
 c
-c  unpack soln into U and A_k
-            istart = 0
+c  calculate A_k 
+            istart = nd
             dth = 2.d0*pi/nd
-            do kbod = 1, k
+            A_k(1) = 0.d0
+            do kbod = 2, k
                A_k(kbod) = 0.d0
                do i = 1, nd
-                  u(istart+i) = soln(istart+i)
                   A_k(kbod) = A_k(kbod) 
-     1               - u(istart+i)*dimag(dzeta(istart+i))
+     1               + soln(istart+i)
                end do
-               A_k(kbod) = A_k(kbod)*dth/(2.d0*pi)
+               A_k(kbod) = A_k(kbod)*dth
                istart = istart+nd
             end do
-            A_k(1) = 0.d0
-ccc            call PRIn2 (' density = *', u, nbk)
-ccc            do kbod = 1, k
-ccc               call PRINF (' kbod = *', kbod, 1)
-ccc               call PRIn2 ('     u = *', u((kbod-1)*nd+1), nd)
-ccc            end do 
             call PRIN2 (' A_k = *', A_k, k)
          end if
 c
@@ -1804,26 +1375,26 @@ c
 ccc         call PRIN2 (' poten = *', poten, n)
          call PRIN2 (' TIME FOR FMM  ON GRID = *',tend-tbeg,1)
 ccc         call PRIN2 (' cfield = *', cfield, 2*n)
+         open (unit = 43, file = 'ugrid.dat')
+            call DUMP (nth, nphi, u_gr, igrid, 1, 43)
+            close(43)
 c
       return
       end
 c
 c
 c---------------
-      subroutine SOL_TAR_FMM (nd, k, nbk, ntar, u, A_k, zeta_k,   
-     1                        x_zeta, y_zeta, zeta, dzeta, zeta_tar, 
-     2                        u_tar, xz_tar, yz_tar, qa, cfield, poten,  
-     3                        nsp, wksp, nvort, vort_k, zk_vort, 
-     4                        gamma_tot)
+      subroutine SOL_TAR_FMM (nd, k, nbk, ntar, u, zeta_k, zeta,  
+     1                        dzeta, xz_tar, yz_tar, u_tar, xat, yat, 
+     2                        qa, cfield, poten, nsp, wksp, nvort, 
+     3                        vort_k, zk_vort, gamma_tot)
 c---------------
 c
       implicit real*8 (a-h,o-z)
-      dimension u(nbk), u_tar(ntar), A_k(k), vort_k(nvort), x_zeta(*),
-     1          y_zeta(*)
-      complex*16 zeta(nbk), dzeta(nbk), zeta_tar(ntar), zkern, 
-     1           zeta_k(k), zdis, eye, qa(*), cfield(*), zQsum, 
-     2           zQ2sum, zk_vort(nvort), ztar
-      dimension xz_tar(ntar), yz_tar(ntar), poten(*), wksp(nsp)
+      dimension u(nbk), u_tar(ntar), vort_k(nvort)
+      complex*16 zeta(nbk), dzeta(nbk), zeta_k(k), zdis, eye, qa(*),
+     1            cfield(*), zQsum, zQ2sum, zk_vort(nvort), ztar
+      dimension xat(*), yat(*), poten(*), wksp(nsp)
       integer*4 iout(2), inform(10), ierr(10)
       REAL*4 TIMEP(2), ETIME
 c
@@ -1833,26 +1404,23 @@ c
          A = -gamma_tot
 c
 c pack zeta and zeta_gr into x_zeta and y_zeta
-         do i = 1, nbk
-            x_zeta(i) = dreal(zeta(i))
-            y_zeta(i) = dimag(zeta(i))
-            qa(i) = dalph*u(i)*dzeta(i)/(2.d0*pi)
-         end do
-         ij = nbk
-         do i = 1, ntar
-            ij = ij + 1
-            x_zeta(ij) = xz_tar(i)
-            y_zeta(ij) = yz_tar(i)
-            qa(ij) = 0.d0
-         end do
-         call PRINF (' ij = *', ij, 1)
-c
          zQsum = 0.d0
          do i = 1, nbk
+            xat(i) = dreal(zeta(i))
+            yat(i) = dimag(zeta(i))
+            qa(i) = dalph*u(i)*dzeta(i)/(2.d0*pi)
             zQ2sum = dalph*u(i)*dzeta(i)*dconjg(zeta(i))
      1                   /(1.d0+cdabs(zeta(i))**2)
             zQsum = zQsum - zQ2sum/(2.d0*pi)
          end do
+         ij = nbk
+         do i = 1, ntar
+            ij = ij + 1
+            xat(ij) = xz_tar(i)
+            yat(ij) = yz_tar(i)
+            qa(ij) = 0.d0
+         end do
+         call PRINF (' ij = *', ij, 1)
 ccc         call PRIn2 (' zQsum = *', zQsum, 2)
 c
          tbeg = etime(timep)
@@ -1868,7 +1436,7 @@ c
 ccc         nnn = nbk
 ccc         nnn = nbk+100
          call DAPIF2 (iout, iflag7, nnn, napb, ninire, mex, ierr, 
-     &                inform, tol, eps7, x_zeta, y_zeta, qa, poten,  
+     &                inform, tol, eps7, xat, yat, qa, poten,  
      &                cfield, wksp, nsp, CLOSE)
          call PRINI (6, 13)
 ccc         call PRIN2 (' cfield = *', cfield, 2*nnn)
@@ -2010,7 +1578,7 @@ c---------------
 c
       implicit real*8 (a-h,o-z)
       dimension igrid(nth,nphi), u_gr(nth,nphi)
-      complex*16 zeta_gr(nth,nphi), zkern, zeta_k(k), zdis, eye
+      complex*16 zeta_gr(nth,nphi), zeta_k(k), eye
 c
          pi = 4.d0*datan(1.d0)
          eye = dcmplx(0.d0, 1.d0)
@@ -2048,7 +1616,7 @@ c---------------
 c
       implicit real*8 (a-h,o-z)
       dimension u_tar(ntar), vort_k(nvort)
-      complex*16 zeta_tar(ntar), zkern, zeta_k(k), zdis, eye,
+      complex*16 zeta_tar(ntar), zeta_k(k), eye,
      1           zk_vort(nvort), z, zeta_vort, zet
 c
          pi = 4.d0*datan(1.d0)
@@ -2093,220 +1661,6 @@ c
 c
       DIMENSION R(N), Z(N)
 c
-      parameter (kmax = 10, npmax = 512, nmax = kmax*npmax)
-      parameter (nth_max = 1000, nphi_max = 1000, 
-     1          ng_max = nth_max*nphi_max)
-      parameter (nsp = 20*nmax + 20*ng_max)
-c      
-      common /geometry/ x_zeta, y_zeta, zeta, dzeta, dsda
-      common /inteqn/ diag, cx, cy, cz, zeta_k
-      common /sys_size/ k, nd, nbk
-      common /fasblk2/ schur,wb,ipvtbf
-      dimension schur(kmax*kmax),wb(kmax),ipvtbf(kmax)
-      dimension x_zeta(nmax+ng_max), y_zeta(nmax+ng_max), dsda(nmax),  
-     1          diag(nmax), cx(kmax), cy(kmax), cz(kmax)
-      complex*16 zeta(nmax), dzeta(nmax), zeta_k(kmax), eye
-c
-         eye = dcmplx(0.d0,1.d0)
-c
-         job = 0
-         call SCHUR_APPLY (zeta,ND,nbk,K,zeta_k,r,z,JOB,
-     1                     SCHUR,k,wb,IPVTBF)
-c
-      RETURN
-      END
-c
-c*********************************************
-c
-      SUBROUTINE SCHUR_APPLY (z,ND,nbk,K,zk,U,W,JOB,
-     1                        SCHUR,LDS,BNEW,IPVTBF)
-      IMPLICIT DOUBLE PRECISION (A-H,O-Z)
-      INTEGER *4 IPVTBF(k)
-      DIMENSION U(*),W(*)
-      DIMENSION SCHUR(k,k),BNEW(k)
-      complex*16 zk(k), z(nbk), zdis
-c
-c     For exterior problem
-C
-C
-C     This subroutine applies the PRECONDITIONER matrix 
-C     associated with the modified boundary integral approach
-C     to the exterior Dirichlet problem in a fast manner.
-C     In the new integral equation formulation derived from
-C     Mikhlin, the discrete system takes the form  Mx = b where
-C     
-C           M = |Mp | C |   Mp is N x N (N = total # bdry points)
-C               |---|---|   C is N x k, R is k x N and L is k x k.
-C               | R | L |
-C
-C     Mp is of the form I + Q where Q is an integral operator 
-C     with continuous kernel. A good preconditioner, therefore,
-C     is
-C     
-C           B = | I | C |   I is N x N (N = total # bdry points)
-C               |---|---|   C is N x k, R is k x N and L is k x k.
-C               | R | L |
-C
-C     The vector U is ordered as 1) dipole densities 2) coeffs Ak.
-C
-C ********************    ON INPUT: ****************************
-C
-C     X = x-coordinates of boundary discretization points
-C     Y = y-coordinates of boundary discretization points
-C     ND(i) = number of points in discretization of ith body
-C     NDMAX = max number of points in discretization of each body
-C     K = number of bodies
-C
-C     CX,CY = coordinates of source point inside Kth body
-C     H = mesh width on Kth body
-C     U = given vector to which matrix is to be applied
-C     JOB  INTEGER
-C          = 0 to solve B*W = U 
-C          = NONZERO to solve TRANSPOSE(B)*W= U.
-C
-C ********************    ON OUTPUT: ****************************
-C
-C     if (JOB .EQ. 0) then W = B^(-1)*U
-C     if (JOB .NEQ. 0) then W = B^(-T)*U
-C-----------------------------------------------------------------
-C
-C     begin by doing Gausian elimination on block R. 
-C     Each of the first (K-1) rows of Block R is composed of 
-C     o single sequence of 1's, of length ND(K). (see paper).
-C
-C     form rhs corresponding to Schur complement.
-C
-c
-       ISTART = nd
-       bnew(1) = u(nbk+1)
-       DO KBOD = 2,K
-         SUM1 = 0.0d0
-         DO i = 1,ND
-             SUM1 = SUM1 + U(ISTART+i)
-         end do
-         BNEW(KBOD) = U(nbk+kbod)-2.d0*SUM1
-         ISTART = ISTART+ND
-      end do
-c
-C
-C     solve for coefficients Ak.
-C
-      CALL DGESL(SCHUR,k,k,IPVTBF,BNEW,JOB)
-      DO 1700 KBOD = 1,K
-         W(nbk+kbod) = BNEW(kbod)
-1700  CONTINUE
-C
-C     solve for remaining variables.
-C
-         ISTART = 0
-         DO 2500 NBOD = 1,K
-         DO 2400 I = 1,ND
-            SUM1 = 0.0d0
-	    DO 2350 KBOD = 1,K
-               dis = cdabs(z(istart+i) - zk(kbod))
-	       arg_log = 2.d0*dis**2/((1+cdabs(z(istart+i))**2)
-     1                          *(1+cdabs(zk(kbod))**2))
-               SUM1 = SUM1 + 0.5d0*dlog(arg_log)*bnew(kbod)
-2350        CONTINUE
-            W(ISTART+i) = 2.d0*U(ISTART+i) - 2.d0*SUM1
-2400     CONTINUE
-         ISTART = ISTART+ND
-2500     CONTINUE
-C
-ccc      call prin2(' w is *',w,norder)
-      RETURN
-      END
-c
-c*********************************************
-c
-      SUBROUTINE SCHUR_FACTOR (z,ND,NMAX,K,zk,SCHUR,WB,IPVTBF)
-      IMPLICIT DOUBLE PRECISION (A-H,O-Z)
-      INTEGER *4 IPVTBF(k)
-      DIMENSION SCHUR(k,k),WB(k)
-      complex*16 zk(k), z(nmax), zdis
-C
-c
-c     For exterior problem
-C
-C     This subroutine factors the Schur complement
-C     of the PRECONDITIONER matrix 
-C     associated with the modified boundary integral approach.
-C     In the new integral equation formulation derived from
-C     Mikhlin, the discrete system takes the form  Mx = b where
-C     
-C           M = |Mp | C |   Mp is N x N (N = total # bdry points)
-C               |---|---|   C is N x k, R is k x N and L is k x k.
-C               | R | L |
-C
-C     Mp is of the form I + Q where Q is an integral operator 
-C     with continuous kernel. A good preconditioner, therefore,
-C     is
-C     
-C           B = | I | C |   I is N x N (N = total # bdry points)
-C               |---|---|   C is N x k, R is k x N and L is k x k.
-C               | R | L |
-C
-C     The vector U is ordered as 1) dipole densities 2) coeffs Ak.
-C
-C ********************    ON INPUT: ****************************
-C
-C     X = x-coordinates of boundary discretization points
-C     Y = y-coordinates of boundary discretization points
-C     ND(i) = number of points in discretization of ith body
-C     NDMAX = max number of points in discretization of each body
-C     K = number of bodies
-C
-C     CX,CY = coordinates of source point inside Kth body
-C     H = mesh width on Kth body
-C     ZWB -s a work array of dimension LDS
-C
-C ********************    ON OUTPUT: ****************************
-C
-C     SCHUR contains the LU factors of the Schur complement
-C     IPVTBF contains pivoting information from LINPACK.
-C
-C-----------------------------------------------------------------
-C
-C     begin by doing Gausian elimination on block R. 
-C     Each of the first (K-1) rows of Block R is composed of 
-C     o single sequence of 1's, of length ND(K). (see paper).
-C
-C     I.e. form the Schur complement and corresponding rhs.
-C
-      write (6,*) '** PRECONDITIONER  **'
-c
-ccc      NORDER = ND*K + K
-      istart = nd
-      DO IBOD = 2,K
-      DO KBOD = 1,K
-         SUM1 = 0.0d0
-         DO i = 1,ND
-            dis = cdabs(z(istart+i) - zk(kbod))
-	    arg_log = 2.d0*dis**2/((1+cdabs(z(istart+i))**2)
-     1                          *(1+cdabs(zk(kbod))**2))
-            SUM1 = SUM1 + 0.5d0*dlog(arg_log)
-         end do
-         SCHUR(IBOD,KBOD) = -2.d0*SUM1
-      end do
-      istart = istart+nd
-      end do
-C
-C     Next construct last row of Schur complement.
-C 
-      DO KBOD = 1,K
-	 SCHUR(1,KBOD) = 1.0d0
-      end do
-C 
-      CALL DGECO(SCHUR,K,K,IPVTBF,RCOND,WB)
-      call prin2(' rcond = *',rcond,1)
-      DO KBOD = 1,K
-	 call prinf(' column *',KBOD,1)
-	 call prin2(' SCHUR = *',schur(1,KBOD),K)
-      END DO
-      call PRINf (' ipvtbf = *', ipvtbf, K)
-      call PRIN2 (' wb = *', wb, k)
-C
-ccc      call prin2(' w is *',w,norder)
       RETURN
       END
 c
@@ -2322,20 +1676,17 @@ c  work.
 c
       implicit double precision (a-h,o-z)
       dimension xx(n), yy(n)
-      parameter (kmax = 10, npmax = 512, nmax = kmax*npmax)
+      parameter (kmax = 10, npmax = 2048, nmax = kmax*npmax)
       parameter (nth_max = 1000, nphi_max = 1000, 
      1          ng_max = nth_max*nphi_max)
       parameter (nsp = 20*nmax + 20*ng_max)
 c      
-      common /geometry/ x_zeta, y_zeta, zeta, dzeta, dsda
-      common /inteqn/ diag_stereo, cx, cy, cz, zeta_k
+      common /geometry/ x_zeta, y_zeta, zeta, dzeta
+      common /inteqn/ diag, zeta_k
       common /sys_size/ k, nd, nbk
-      common /sphere_int/ xs, ys, zs, xn, yn, zn, diag
 c
-      dimension x_zeta(nmax+ng_max), y_zeta(nmax+ng_max), dsda(nmax),  
-     1          diag_stereo(nmax), cx(kmax), cy(kmax), cz(kmax)
-      dimension xs(nmax), ys(nmax), zs(nmax), xn(nmax), yn(nmax), 
-     1          zn(nmax), diag(nmax)
+      dimension x_zeta(nmax), y_zeta(nmax),   
+     1          diag(nmax)
       complex*16 zeta(nmax), dzeta(nmax), zeta_k(kmax)
 c
 c Fast Multipole Arrays
@@ -2359,7 +1710,7 @@ c
 ccc         call MATVEC_SPHERE (k, nd, nbk, xs, ys, zs, xn, yn, zn,
 ccc     1                       dsda, diag, cx, cy, cz, A_k, xx, yy)
          call FASMVP (k, nd, nbk, nsp, x_zeta, y_zeta, zeta, dzeta,   
-     1                zeta_k, diag_stereo, dsda, A_k, xx, yy, qa,   
+     1                zeta_k, diag, A_k, xx, yy, qa,   
      2                cfield, poten, wksp)
 ccc         call FASMVP_TEST (k, nd, nbk, nsp, x_zeta, y_zeta, zeta,    
 ccc     1                dzeta, zeta_k, diag, dsda, A_k, xx, yy, qa,   
