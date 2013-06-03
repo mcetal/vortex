@@ -1,0 +1,6 @@
+*.o
+make*
+*.atools
+Release/
+.DS_Store
+*.exe
