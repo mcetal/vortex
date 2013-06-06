@@ -13,6 +13,22 @@ c     laplace_beltrami(u) = 0 (except at point vortex locations)
 c       u = 0 on \gamma_1
 c       u = A_k on \gamma_k
 c
+c Vortex position is advanced by forward Euler method
+c
+c The program outputs various matlab files for plotting:
+c  geo_3d.m 		shows geometry on the sphere
+c  geo_stereo.m		shows geometry in stereographic plane
+c  targets_stereo.m	location of target points for checking accuracy
+c  vort_path.m		shows vortex path (not sure it works for 
+c                 	multiple vortices)
+c  vortex_stereo.m 	initial location of vortices in stereographic plane
+c
+c In addition, run surgrid.m to plot solution on grid
+c This requires the following files:
+c  igrid.dat - shows whether grid point in or out of domain
+c  xgrid.dat, ygrid.dat, zgrid.dat - surface grid on sphere
+c  xzeta_grid.dat, yzeta_grid.dat - grid in stereographic plane
+c  ugrid.dat - solution on grid
 c
 c     ------------------------------------------------------------------
       implicit real*8 (a-h, o-z)
@@ -120,6 +136,9 @@ c Construct grid on surface of sphere
          if (debug) then
             call TARGET_POINTS (k, nd, nbk, ak, bk, th_k, phi_k, ntar,
      2                          xz_tar, yz_tar, zeta_tar)
+            call prinf (' ntar = *', ntar, 1)
+            call prin2 (' xz_tar = *', xz_tar, ntar)
+            call prin2 (' yz_tar = *', yz_tar, ntar)
             ntime = 1
          end if
 c
@@ -133,8 +152,10 @@ c Construct the RHS and solve
             call PRINI (6,13)
             call GETRHS (k, nd, nbk, zeta_k, zeta, rhs, nvort, vort_k, 
      1                   zk_vort, gamma_tot)
+            call PRIN2 (' rhs = *', rhs, nbk)
             call SOLVE (nd, k, kmax, nbk, rhs, density, A_k,  
      1                  gmwork, lrwork, igwork, liwork, maxl)
+            call prin2 (' density = *', density, nbk)
 c
 c Construct solution on surface grid
 ccc         call SOL_GRID (nd, k, nbk, nth, nphi, density, A_k, zeta_k,   
@@ -142,10 +163,10 @@ ccc     1                  zeta, dzeta, igrid, zeta_gr, u_gr)
          nplot = mod(it,100)
          call PRINF (' nplot = *', nplot, 1)
 ccc         if (mod(it,100).eq.0) then
-ccc         call SOL_GRID_FMM (nd, k, nbk, nth, nphi, density, A_k, zeta_k,   
-ccc     1                      zeta, dzeta, igrid, zeta_gr, u_gr,
-ccc     2                      x_zeta, y_zeta, qa, cfield, poten, nsp, 
-ccc     3                      wksp, nvort, vort_k, zk_vort, gamma_tot)
+         call SOL_GRID_FMM (nd, k, nbk, nth, nphi, density, zeta_k,   
+     1                      zeta, dzeta, igrid, zeta_gr, u_gr,
+     2                      xat, yat, qa, cfield, poten, nsp, 
+     3                      wksp, nvort, vort_k, zk_vort, gamma_tot)
          if (debug) then
             call SOL_TAR_FMM (nd, k, nbk, ntar, density, zeta_k,   
      1                        zeta, dzeta, xz_tar, yz_tar, u_tar, xat,  
@@ -620,7 +641,7 @@ c
 c
 c********1*********2*********3*********4*********5*********6*********7**
 c
-      subroutine TARGET_POINTS (k, nd, nbk, ak, bk, th_k, phi_k, 
+      subroutine TARGET_POINTS (k, nd, nbk, ak, bk, th_k, phi_k, ntar,
      1                          xz_tar, yz_tar, zeta_tar)
 c---------------
 c Same idea as SURFACE_GRID, except far fewer points and epsilon
@@ -1262,19 +1283,18 @@ c
 c
 c
 c---------------
-      subroutine SOL_GRID_FMM (nd, k, nbk, nth, nphi, u, A_k, zeta_k,   
+      subroutine SOL_GRID_FMM (nd, k, nbk, nth, nphi, u, zeta_k,   
      1                         zeta, dzeta, igrid, zeta_gr, u_gr,
-     2                         x_zeta, y_zeta, qa, cfield, poten, nsp, 
+     2                         xat, yat, qa, cfield, poten, nsp, 
      3                         wksp, nvort, vort_k, zk_vort, gamma_tot)
 c---------------
 c
       implicit real*8 (a-h,o-z)
-      dimension u(nbk), igrid(nth,nphi), u_gr(nth,nphi), A_k(k),
-     1          vort_k(nvort)
+      dimension u(nbk), igrid(nth,nphi), u_gr(nth,nphi), vort_k(nvort)
       complex*16 zeta(nbk), dzeta(nbk), zeta_gr(nth,nphi), zkern, 
      1           zeta_k(k), zdis, eye, qa(*), cfield(*), zQsum, 
      2           zQ2sum, zk_vort(nvort)
-      dimension x_zeta(*), y_zeta(*), poten(*), wksp(nsp)
+      dimension xat(*), yat(*), poten(*), wksp(nsp)
       integer*4 iout(2), inform(10), ierr(10)
       REAL*4 TIMEP(2), ETIME
 c
@@ -1289,30 +1309,27 @@ ccc         call prin2 ('                  gamma_tot = *', gamma_tot, 1)
 ccc         call prin2 ('                 zeta_k = *', zeta_k, 2*k)
 c
 c pack zeta and zeta_gr into x_zeta and y_zeta
+         zQsum = 0.d0
          do i = 1, nbk
-            x_zeta(i) = dreal(zeta(i))
-            y_zeta(i) = dimag(zeta(i))
+            xat(i) = dreal(zeta(i))
+            yat(i) = dimag(zeta(i))
             qa(i) = dalph*u(i)*dzeta(i)/(2.d0*pi)
+            zQ2sum = dalph*u(i)*dzeta(i)*dconjg(zeta(i))
+     1                   /(1.d0+cdabs(zeta(i))**2)
+            zQsum = zQsum - zQ2sum/(2.d0*pi)
          end do
          ij = nbk
          do i = 1, nth
             do j = 1, nphi
                if (igrid(i,j).ne.0) then
                   ij = ij + 1
-                  x_zeta(ij) = dreal(zeta_gr(i,j))
-                  y_zeta(ij) = dimag(zeta_gr(i,j))
+                  xat(ij) = dreal(zeta_gr(i,j))
+                  yat(ij) = dimag(zeta_gr(i,j))
                   qa(ij) = 0.d0
                end if
             end do
          end do
          call PRINF (' ij = *', ij, 1)
-c
-         zQsum = 0.d0
-         do i = 1, nbk
-            zQ2sum = dalph*u(i)*dzeta(i)*dconjg(zeta(i))
-     1                   /(1.d0+cdabs(zeta(i))**2)
-            zQsum = zQsum - zQ2sum/(2.d0*pi)
-         end do
 ccc         call PRIn2 (' zQsum = *', zQsum, 2)
 c
          tbeg = etime(timep)
@@ -1328,7 +1345,7 @@ c
 ccc         nnn = nbk
 ccc         nnn = nbk+100
          call DAPIF2 (iout, iflag7, nnn, napb, ninire, mex, ierr, 
-     &                inform, tol, eps7, x_zeta, y_zeta, qa, poten,  
+     &                inform, tol, eps7, xat, yat, qa, poten,  
      &                cfield, wksp, nsp, CLOSE)
          call PRINI (6, 13)
 ccc         call PRIN2 (' cfield = *', cfield, 2*nnn)
@@ -1341,7 +1358,6 @@ ccc         call PRIN2 (' cfield = *', cfield, 2*nnn)
 ccc         call PRINF (' Number of Levels used = *', inform(3), 1)
 ccc         call PRIN2 (' cfield = *', cfield, 2*nbk)
 c
-         call PRIN2 (' a_k in sol_GRID_FMM = *', A_k, k)
 c Fix up field
          ij = nbk
          umax = -1.d10
@@ -1391,7 +1407,8 @@ c---------------
 c---------------
 c
       implicit real*8 (a-h,o-z)
-      dimension u(nbk), u_tar(ntar), vort_k(nvort)
+      dimension u(nbk), u_tar(ntar), vort_k(nvort), xz_tar(ntar),
+     1          yz_tar(ntar)
       complex*16 zeta(nbk), dzeta(nbk), zeta_k(k), zdis, eye, qa(*),
      1            cfield(*), zQsum, zQ2sum, zk_vort(nvort), ztar
       dimension xat(*), yat(*), poten(*), wksp(nsp)
