@@ -16,12 +16,12 @@ c
 c Vortex position is advanced by forward Euler method
 c
 c The program outputs various matlab files for plotting:
-c  geo_3d.m 		shows geometry on the sphere
+c  geo_3d.m		shows geometry on the sphere
 c  geo_stereo.m		shows geometry in stereographic plane
 c  targets_stereo.m	location of target points for checking accuracy
 c  vort_path.m		shows vortex path (not sure it works for 
-c                 	multiple vortices)
-c  vortex_stereo.m 	initial location of vortices in stereographic plane
+c			multiple vortices)
+c  vortex_stereo.m	initial location of vortices in stereographic plane
 c
 c In addition, run surgrid.m to plot solution on grid
 c This requires the following files:
@@ -209,13 +209,13 @@ c
      3                      ntime)
 c---------------
 c OUTPUT
-c	k 	= number of contours
+c	k	= number of contours
 c	nd	= number of points per contour
-c	nbk 	= total size of system	
+c	nbk	= total size of system	
 c	nth,nphi
 c		= dimensions of grid for plotting
 c	ak,bk	= major/minor axis of ellipse
-c	(th_k, 	= location of hole centre in spherical coordinates
+c	(th_k,	= location of hole centre in spherical coordinates
 c       phi_k)
 c	(cx,cy,cz)
 c		= location of centre in physical coordinates
@@ -437,11 +437,11 @@ c
      1                     dx, dy, dz, d2x, d2y, d2z)
 c---------------
 c INPUT
-c	k 	= number of contours
+c	k	= number of contours
 c	nd	= number of points per contour
-c	nbk 	= total size of system	
+c	nbk	= total size of system	
 c	ak,bk	= major/minor axis of ellipse
-c	(th_k, 	= location of hole centre in spherical coordinates
+c	(th_k,	= location of hole centre in spherical coordinates
 c       phi_k)
 c OUTPUT
 c	(xs,ys,zs)	
@@ -529,12 +529,12 @@ c---------------
 c Constructs grid points on surface of sphere for plotting solution
 c in domain
 c INPUT
-c	k 	= number of contours
+c	k	= number of contours
 c	nd	= number of points per contour
-c	nbk 	= total size of system	
+c	nbk	= total size of system	
 c	(nth,nphi)
 c		= number of grid points in theta and phi directions
-c	ak,bk 	= major/minor axes of ellipses
+c	ak,bk	= major/minor axes of ellipses
 c	(th_k,phi_k)	
 c		= hole centres in spherical coordinates
 c OUTPUT
@@ -647,16 +647,16 @@ c---------------
 c Same idea as SURFACE_GRID, except far fewer points and epsilon
 c is fixed (and relatively large)
 c INPUT
-c	k 	= number of contours
+c	k	= number of contours
 c	nd	= number of points per contour
-c	nbk 	= total size of system	
+c	nbk	= total size of system	
 c	(nth,nphi)
 c		= number of grid points in theta and phi directions
-c	ak,bk 	= major/minor axes of ellipses
+c	ak,bk	= major/minor axes of ellipses
 c	(th_k,phi_k)	
 c		= hole centres in spherical coordinates
 c OUTPUT
-c       ntar 	= number of target points
+c       ntar	= number of target points
 c	zeta_tar	
 c		= target point locations in stereographic plane	
 c		= xzeta_gr + i yzeta_gr
@@ -738,9 +738,9 @@ c
 c---------------
 c Constructs geometry of boundaries in stereographic plane
 c INPUT
-c	k 	= number of contours
+c	k	= number of contours
 c	nd	= number of points per contour
-c	nbk 	= total size of system	
+c	nbk	= total size of system	
 c	(xs,ys,zs)	
 c		= coordinates of each point on boundary
 c	(dx,dy,dz)			
@@ -753,7 +753,7 @@ c		= coordinates of vortices on sphere
 c OUTPUT
 c	zeta = x_zeta + i y_zeta
 c		= boundary points in stereographic plane
-c 	dzeta	= derivative of zeta wrt parametrization oriented
+c	dzeta	= derivative of zeta wrt parametrization oriented
 c		  carefully for evaluation of Cauchy integrals
 c	diag	= self-interacting term in integral operator
 c
@@ -856,11 +856,11 @@ c represent psi = psi^* + sum vortices + A G(zeta,zeta_k(1))
 c boundary conditions for psi^* are 
 c    psi^* = -sum vortices - A G(zeta,zeta_k(1))
 c INPUT
-c	k 	= number of contours
+c	k	= number of contours
 c	nd	= number of points per contour
-c	nbk 	= total size of system	
+c	nbk	= total size of system	
 c       zeta_k	= hole centres in stereographic plane
-c	nvort 	= number of vortices
+c	nvort	= number of vortices
 c	vort_k	= vortex strength
 c	zk_vort	= vortex locations in stereographic plane
 c	gamma_tot
@@ -899,17 +899,20 @@ c
 c
 c********1*********2*********3*********4*********5*********6*********7**
 c
-      subroutine  FASMVP (k, nd, nbk, nsp, x_zeta, y_zeta, zeta,    
-     1                    dzeta, zeta_k, diag, A_k, u, w, qa,   
-     2                    cfield, poten, wksp)
+      subroutine  FASMVP (k, nd, nbk, x_zeta, y_zeta, zeta,    
+     1                    dzeta, zeta_k, diag, A_k, u, w, charge,   
+     2                    grad, pot)
 c---------------
 c
       implicit real*8 (a-h, o-z)
-      integer*4 iout(2), inform(10), ierr(10)
-      complex*16 zeta(nbk), dzeta(nbk), qa(nbk), cfield(nbk), 
-     1           zQsum, zQ2sum, eye, zeta_k(k), zdis
-      dimension u(*), w(*), poten(nbk), wksp(nsp), x_zeta(nbk), 
-     1          y_zeta(nbk), diag(nbk), A_k(k)
+      integer*4 inform(10), ier, iprec, ifcharge, ifpot,
+     1	       ifgrad,ifhess,ifdipole,k,nd,nbk	
+      complex*16 zeta(nbk), dzeta(nbk), charge(nbk), grad(2,nbk), 
+     1           zQsum, zQ2sum, eye, zeta_k(k), zdis, 
+     1           dipstr(nbk), pot(nbk)
+      dimension u(*), w(*), x_zeta(nbk), 
+     1          y_zeta(nbk), diag(nbk), A_k(k),
+     1          source(2,nbk),dipvec(2,nbk)
       REAL*4 TIMEP(2), ETIME
 c
          pi = 4.D0*DATAN(1.D0)
@@ -933,37 +936,60 @@ ccc            A_k(kbod) = A_k(kbod)*dalph/(2.d0*pi)
 c
          zQsum = 0.d0
          do i = 1, nbk
-            qa(i) = dalph*u(i)*dzeta(i)/(2.d0*pi)
+            charge(i) = 0.d0
             zQ2sum = dalph*u(i)*dzeta(i)*dconjg(zeta(i))
      1                   /(1.d0+cdabs(zeta(i))**2)
             zQsum = zQsum - zQ2sum/(2.d0*pi)
          end do
 ccc         call PRIn2 (' zQsum = *', zQsum, 2)
 c
-         tbeg = etime(timep)
-         iout(1) = 0
-         iout(2) = 13
-         iflag7 = 3
-         napb = 20
-         ninire = 2
-         mex = 300
-         eps7 = 1.d-14
-         tol = 1.d-14
-         nnn = nbk
-         call DAPIF2 (iout, iflag7, nnn, napb, ninire, mex, ierr, 
-     &                inform, tol, eps7, x_zeta, y_zeta, qa, poten,  
-     &                cfield, wksp, nsp, CLOSE)
+c         tbeg = etime(timep)
+c         iout(1) = 0
+c         iout(2) = 13
+c         iflag7 = 3
+c         napb = 20
+c         ninire = 2
+c         mex = 300
+c         eps7 = 1.d-14
+c         tol = 1.d-14
+c         nnn = nbk
+c         call DAPIF2 (iout, iflag7, nnn, napb, ninire, mex, ierr, 
+c     &                inform, tol, eps7, x_zeta, y_zeta, qa, poten,  
+c     &                cfield, wksp, nsp, CLOSE)
+
+	
+c Set parameters for FMM call
+	iprec    = 5
+	ifcharge = 0
+	ifdipole = 1
+	ifpot    = 1
+	ifgrad   = 0
+	ifhess   = 0
+	
+	do i = 1,nbk
+	   source(1,i) = x_zeta(i)
+	   source(2,i) = y_zeta(i)
+	   dipstr(i)   = u(i)
+	   dipvec(1,i) = -dimag(dzeta(i))
+	   dipvec(2,i) = dreal(dzeta(i))  		
+	end do
+
+
+	call lfmm2dpartself(ier,iprec,nbk,source,ifcharge, 
+     &			charge,ifdipole,dipstr,dipvec,ifpot,
+     &			pot,ifgrad,grad,ifhess,hess) 	
          call PRINI (6, 13)
 ccc         call PRIN2 (' qa = *', qa, 2*nnn)
 ccc         call PRIN2 (' cfielf = *', cfield, 2*nnn)
-         if (ierr(1).ne.0) then
-            write (6,*) '  ERROR IN DAPIF2, IERR = ', (ierr(ii),ii=1,6)
-            write(6,*) '  INFORM = ', (inform(ii),ii=1,6)
+         if (ier.ne.0) then
+            write (6,*) '  ERROR IN FMM '
             stop
          end if
 ccc         call PRINF (' Number of Levels used = *', inform(3), 1)
 ccc         call PRIN2 (' cfield = *', cfield, 2*nbk)
 c
+
+	print *,"Imaginary part of Potential::::::::",dimag(pot(10))
 c Fix up field
          istart = 0
          do kbod = 1, k
@@ -972,8 +998,9 @@ c Fix up field
      1                   *dconjg(zeta(istart+i))
      2                   /(1.d0+cdabs(zeta(istart+i))**2)
                zQ2sum = - zQ2sum/(2.d0*pi)
-               cfield(istart+i) = cfield(istart+i) - zQsum + zQ2sum
-               w(istart+i) = 0.5d0*u(istart+i) + dimag(cfield(istart+i)) 
+               pot(istart+i) = dreal(dalph*pot(istart+i)/(2.d0*pi)) 
+     1				- zQsum + zQ2sum
+               w(istart+i) = 0.5d0*u(istart+i) + pot(istart+i) 
      1                        - dalph*diag(istart+i)*u(istart+i)
      2                        - A_k(kbod)
             end do
@@ -1708,8 +1735,7 @@ c
 c
 c Fast Multipole Arrays
 c
-      complex*16 qa(nmax), cfield(nmax)
-      dimension poten(nmax), wksp(nsp)
+      complex*16 qa(nmax), cfield(2,nmax), poten(nmax)
 c
 c  local work arrays
 c
@@ -1726,9 +1752,9 @@ ccc         zeta_k(1) = dcmplx(-10.d0,-10.d0)
 c
 ccc         call MATVEC_SPHERE (k, nd, nbk, xs, ys, zs, xn, yn, zn,
 ccc     1                       dsda, diag, cx, cy, cz, A_k, xx, yy)
-         call FASMVP (k, nd, nbk, nsp, x_zeta, y_zeta, zeta, dzeta,   
+         call FASMVP (k, nd, nbk, x_zeta, y_zeta, zeta, dzeta,   
      1                zeta_k, diag, A_k, xx, yy, qa,   
-     2                cfield, poten, wksp)
+     2                cfield, poten)
 ccc         call FASMVP_TEST (k, nd, nbk, nsp, x_zeta, y_zeta, zeta,    
 ccc     1                dzeta, zeta_k, diag, dsda, A_k, xx, yy, qa,   
 ccc     2                cfield, poten, wksp)
