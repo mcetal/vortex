@@ -6,10 +6,10 @@ SOURCES =dapif1.f dapif2.f dapif3.f dcfft.f matplot.f \
 #object files for fmm testing  
 OBJECTS = $(SOURCES:.f=.o)
 
-#Current Directory
-FMMDIREC =/home/visitor/nchan/fortran/vortex/fmmlib2d-1.2/src 
-DIREC=/home/visitor/nchan/fortran/vortex/
-GMRESDIREC=/home/visitor/nchan/fortran/vortex/GMRES
+#Current Directory 
+DIREC=/set-path-to-vortex-here/
+FMMDIREC=$(DIREC)/fmmlib2d-1.2/src
+GMRESDIREC=$(DIREC)/GMRES
 #libraries required
 #libfmm2d.a is the compiled library of the latest fmm code.
 #GMRES has the required files for the GMRES method 
