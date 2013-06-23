@@ -167,12 +167,12 @@ ccc     1                  zeta, dzeta, igrid, zeta_gr, u_gr)
 ccc         if (mod(it,100).eq.0) then
          call SOL_GRID_FMM (nd, k, nbk, nth, nphi, density, zeta_k,   
      1                      zeta, dzeta, igrid, zeta_gr, u_gr,
-     2                      xat, yat, qa, grad, pot, 
+     2                      qa, grad, pot, 
      3                      nvort, vort_k, zk_vort, gamma_tot)
          if (debug) then
             call SOL_TAR_FMM (nd, k, nbk, ntar, density, zeta_k,   
-     1                        zeta, dzeta, xz_tar, yz_tar, u_tar, xat,  
-     2                        yat, qa, cfield, poten, nsp, wksp, nvort, 
+     1                        zeta, dzeta, xz_tar, yz_tar, u_tar, 
+     2                        qa, grad, pot, nvort, 
      3                        vort_k, zk_vort, gamma_tot)
 c
 c          for a vortex in presence of cap with radius r0, check solution
@@ -1325,7 +1325,7 @@ c
 c---------------
       subroutine SOL_GRID_FMM (nd, k, nbk, nth, nphi, u, zeta_k,   
      1                         zeta, dzeta, igrid, zeta_gr, u_gr,
-     2                         xat, yat, qa, grad, pot, 
+     2                         qa, grad, pot, 
      3                         nvort, vort_k, zk_vort, gamma_tot)
 c---------------
 c
@@ -1424,6 +1424,19 @@ c         end if
 ccc         call PRINF (' Number of Levels used = *', inform(3), 1)
 ccc         call PRIN2 (' cfield = *', cfield, 2*nbk)
 c
+
+	if (ier.eq.4) then
+            print *, 'ERROR IN FMM: Cannot allocate tree workspace'
+            stop
+	   else if(ier.eq.8) then
+		print *, 'ERROR IN FMM: Cannot allocate bulk FMM workspace'
+		stop
+	   else if(ier.eq.16) then
+		print *, 'ERROR IN FMM: Cannot allocate multipole expansion workspace 
+     1			in FMM' 
+		stop
+         end if
+
 c Fix up field
          ij = 0
          umax = -1.d10
@@ -1434,7 +1447,7 @@ c Fix up field
                if (igrid(i,j).ne.0) then     
                   ij = ij + 1
 		pottarg(ij) = dreal(dalph*pottarg(ij)/(2*pi*eye))           
-                  u_gr(i,j) = dimag(pot(ij) - zQsum)
+                  u_gr(i,j) = pot(ij) - zQsum
                   psi_vort = 0.d0
                   call POINT_VORTEX (zeta_gr(i,j), zeta_k(1), circ)
                   do ivort = 1, nvort
@@ -1468,8 +1481,8 @@ c
 c
 c---------------
       subroutine SOL_TAR_FMM (nd, k, nbk, ntar, u, zeta_k, zeta,  
-     1                        dzeta, xz_tar, yz_tar, u_tar, xat, yat, 
-     2                        qa, cfield, poten, nsp, wksp, nvort, 
+     1                        dzeta, xz_tar, yz_tar, u_tar, 
+     2                        qa, grad, pot,nvort, 
      3                        vort_k, zk_vort, gamma_tot)
 c---------------
 c
@@ -1477,9 +1490,12 @@ c
       dimension u(nbk), u_tar(ntar), vort_k(nvort), xz_tar(ntar),
      1          yz_tar(ntar)
       complex*16 zeta(nbk), dzeta(nbk), zeta_k(k), zdis, eye, qa(*),
-     1            cfield(*), zQsum, zQ2sum, zk_vort(nvort), ztar
-      dimension xat(*), yat(*), poten(*), wksp(nsp)
-      integer*4 iout(2), inform(10), ierr(10)
+     1            grad(2,*), zQsum, zQ2sum, zk_vort(nvort), ztar,
+     2		pot(*),hess(3,nbk),pottarg(ntar),
+     3		gradtarg(ntar),hesstarg(ntar),dipstr(nbk) 
+      dimension source(2,nbk),targ(2,ntar),dipvec(2,nbk)
+      integer*4 ier,iprec,ifcharge,ifdipole,ifpot,ifgrad,ifhess,
+     1          ifpottarg,ifgradtarg,ifhesstarg
       REAL*4 TIMEP(2), ETIME
 c
          pi = 4.d0*datan(1.d0)
@@ -1490,55 +1506,87 @@ c
 c pack zeta and zeta_gr into x_zeta and y_zeta
          zQsum = 0.d0
          do i = 1, nbk
-            xat(i) = dreal(zeta(i))
-            yat(i) = dimag(zeta(i))
-            qa(i) = dalph*u(i)*dzeta(i)/(2.d0*pi)
+            source(1,i) = dreal(zeta(i))
+            source(2,i) = dimag(zeta(i))
+            dipstr(i) = u(i)
             zQ2sum = dalph*u(i)*dzeta(i)*dconjg(zeta(i))
      1                   /(1.d0+cdabs(zeta(i))**2)
             zQsum = zQsum - zQ2sum/(2.d0*pi)
+	   dipvec(1,i) = -dimag(dzeta(i))
+	   dipvec(2,i) = dreal(dzeta(i))
          end do
-         ij = nbk
+         
          do i = 1, ntar
-            ij = ij + 1
-            xat(ij) = xz_tar(i)
-            yat(ij) = yz_tar(i)
-            qa(ij) = 0.d0
+            targ(1,i) = xz_tar(i)
+            targ(2,i) = yz_tar(i)
          end do
-         call PRINF (' ij = *', ij, 1)
 ccc         call PRIn2 (' zQsum = *', zQsum, 2)
 c
-         tbeg = etime(timep)
-         iout(1) = 0
-         iout(2) = 13
-         iflag7 = 3
-         napb = 50
-         ninire = 2
-         mex = 300
-         eps7 = 1.d-14
-         tol = 1.d-14
-         nnn = ij
+c         tbeg = etime(timep)
+c         iout(1) = 0
+c         iout(2) = 13
+c         iflag7 = 3
+c         napb = 50
+c         ninire = 2
+c         mex = 300
+c         eps7 = 1.d-14
+c         tol = 1.d-14
+c         nnn = ij
 ccc         nnn = nbk
 ccc         nnn = nbk+100
-         call DAPIF2 (iout, iflag7, nnn, napb, ninire, mex, ierr, 
-     &                inform, tol, eps7, xat, yat, qa, poten,  
-     &                cfield, wksp, nsp, CLOSE)
-         call PRINI (6, 13)
+c Set parameters for FMM call
+	iprec    = 5
+	ifcharge = 0
+	ifdipole = 1
+	ifpot    = 1
+	ifgrad   = 0
+	ifhess   = 0
+	ifpottarg = 1
+	ifgradtarg = 0
+	ifhesstarg = 0
+
+
+	call lfmm2dparttarg(ier,iprec,nbk,source,ifcharge, 
+     &			charge,ifdipole,dipstr,dipvec,ifpot,
+     &			pot,ifgrad,grad,ifhess,hess,ntar,targ,
+     &			ifpottarg,pottarg,ifgradtarg,gradtarg,
+     &			ifhesstarg,hesstarg) 	
+
+
+c         call DAPIF2 (iout, iflag7, nnn, napb, ninire, mex, ierr, 
+c     &                inform, tol, eps7, xat, yat, qa, poten,  
+c     &                cfield, wksp, nsp, CLOSE)
+c         call PRINI (6, 13)
 ccc         call PRIN2 (' cfield = *', cfield, 2*nnn)
-         call PRINF (' Number of Levels = *', inform(3), 1)
-         if (ierr(1).ne.0) then
-            write (6,*) '  ERROR IN DAPIF2, IERR = ', (ierr(ii),ii=1,6)
-            write(6,*) '  INFORM = ', (inform(ii),ii=1,6)
-            stop
-         end if
+c         call PRINF (' Number of Levels = *', inform(3), 1)
+c         if (ierr(1).ne.0) then
+c            write (6,*) '  ERROR IN DAPIF2, IERR = ', (ierr(ii),ii=1,6)
+c            write(6,*) '  INFORM = ', (inform(ii),ii=1,6)
+c            stop
+c         end if
 ccc         call PRINF (' Number of Levels used = *', inform(3), 1)
 ccc         call PRIN2 (' cfield = *', cfield, 2*nbk)
 c
 ccc         call PRIN2 (' a_k in sol_GRID_FMM = *', A_k, k)
+
+	if (ier.eq.4) then
+            print *, 'ERROR IN FMM: Cannot allocate tree workspace'
+            stop
+	   else if(ier.eq.8) then
+		print *, 'ERROR IN FMM: Cannot allocate bulk
+     $			 FMM workspace'
+		stop
+	   else if(ier.eq.16) then
+		print *, 'ERROR IN FMM: Cannot allocate multipole
+     $  			 expansion workspace 
+     1			in FMM' 
+		stop
+         end if
+
 c Fix up field
-         ij = nbk
          do i = 1, ntar
-            ij = ij + 1           
-            u_tar(i) = dimag(cfield(ij) - zQsum)
+	   pottarg(i) = (dalph*pottarg(i)/(2*pi))          
+            u_tar(i) = (pottarg(i) - zQsum)
             ztar = dcmplx(xz_tar(i),yz_tar(i))
             call POINT_VORTEX (ztar, zeta_k(1), circ)
             psi_vort = 0.d0
