@@ -1586,7 +1586,7 @@ ccc         call PRIN2 (' a_k in sol_GRID_FMM = *', A_k, k)
 c Fix up field
          do i = 1, ntar
 	   pottarg(i) = (dalph*pottarg(i)/(2*pi))          
-            u_tar(i) = (pottarg(i) - zQsum)
+            u_tar(i) = pottarg(i) - dimag(zQsum)
             ztar = dcmplx(xz_tar(i),yz_tar(i))
             call POINT_VORTEX (ztar, zeta_k(1), circ)
             psi_vort = 0.d0
