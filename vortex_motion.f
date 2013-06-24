@@ -941,7 +941,7 @@ c
             charge(i) = 0.d0
             zQ2sum = dalph*u(i)*dzeta(i)*dconjg(zeta(i))
      1                   /(1.d0+cdabs(zeta(i))**2)
-            zQsum = zQsum - zQ2sum/(2.d0*pi)
+            zQsum = zQsum - dreal(zQ2sum/(2.d0*pi*eye))
          end do
 ccc         call PRIn2 (' zQsum = *', zQsum, 2)
 c
@@ -1010,7 +1010,7 @@ c Fix up field
                zQ2sum = dalph*u(istart+i)*dzeta(istart+i)
      1                   *dconjg(zeta(istart+i))
      2                   /(1.d0+cdabs(zeta(istart+i))**2)
-               zQ2sum = - zQ2sum/(2.d0*pi)
+               zQ2sum = - dreal(zQ2sum/(2.d0*pi*eye))
                pot(istart+i) = dreal(dalph*pot(istart+i)/(2.d0*pi)) 
      1				- zQsum + zQ2sum
                w(istart+i) = 0.5d0*u(istart+i) + pot(istart+i) 
@@ -1360,7 +1360,7 @@ c pack zeta and zeta_gr into x_zeta and y_zeta
             qa(i) = 0.d0
             zQ2sum = dalph*u(i)*dzeta(i)*dconjg(zeta(i))
      1                   /(1.d0+cdabs(zeta(i))**2)
-            zQsum = zQsum - zQ2sum/(2.d0*pi)
+            zQsum = zQsum - zQ2sum/(2.d0*pi*eye)
 	   dipstr(i) = u(i)
 	   dipvec(1,i) = -dimag(dzeta(i))
 	   dipvec(2,i) = dreal(dzeta(i))
@@ -1446,7 +1446,7 @@ c Fix up field
                u_gr(i,j) = -10.d0
                if (igrid(i,j).ne.0) then     
                   ij = ij + 1
-		pottarg(ij) = dreal(dalph*pottarg(ij)/(2*pi*eye))           
+		pottarg(ij) = dreal(dalph*pottarg(ij)/(2*pi))           
                   u_gr(i,j) = pot(ij) - zQsum
                   psi_vort = 0.d0
                   call POINT_VORTEX (zeta_gr(i,j), zeta_k(1), circ)
@@ -1511,7 +1511,7 @@ c pack zeta and zeta_gr into x_zeta and y_zeta
             dipstr(i) = u(i)
             zQ2sum = dalph*u(i)*dzeta(i)*dconjg(zeta(i))
      1                   /(1.d0+cdabs(zeta(i))**2)
-            zQsum = zQsum - zQ2sum/(2.d0*pi)
+            zQsum = zQsum - dreal(zQ2sum/(2.d0*pi*eye))
 	   dipvec(1,i) = -dimag(dzeta(i))
 	   dipvec(2,i) = dreal(dzeta(i))
          end do
@@ -1586,7 +1586,7 @@ ccc         call PRIN2 (' a_k in sol_GRID_FMM = *', A_k, k)
 c Fix up field
          do i = 1, ntar
 	   pottarg(i) = (dalph*pottarg(i)/(2*pi))          
-            u_tar(i) = pottarg(i) - dimag(zQsum)
+            u_tar(i) = pottarg(i) - zQsum
             ztar = dcmplx(xz_tar(i),yz_tar(i))
             call POINT_VORTEX (ztar, zeta_k(1), circ)
             psi_vort = 0.d0
