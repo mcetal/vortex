@@ -80,16 +80,27 @@ c  GMWORK and IGWORK are work arrays used by DGMRES
 c
       parameter (maxl = 50,liwork=30,  
      1           lrwork=10+(nmax+kmax)*(maxl+6)+maxl*(maxl+3))
-      dimension gmwork(lrwork), igwork(liwork)
-      dimension density(nmax)
+      dimension gmwork(lrwork), igwork(liwork),density(nmax)
 c
 c Fast Multipole Arrays
+c Location of dipoles - dipvec(normal to dz) 
+c pottarg is the potential at the target,
+c gradtarg, its gradient and hesstarg, its gradient
+c pot, grad, hess - at the source points
+c Charges , qa are essentially 0 
+c dipstr - dipole strength is essentially density
+
       parameter (nsp = 20*nmax + 20*ng_max)
       dimension xat(nmax+ng_max), yat(nmax+ng_max)
       complex*16 qa(nmax+ng_max), cfield(nmax+ng_max),
-     $            pot(nmax+ng_max), grad(2,nmax+ng_max),
-     $            hess(3,nmax+ng_max)
-      dimension poten(nmax+ng_max), wksp(nsp)
+     $           pot(nmax+ng_max), grad(2*nmax+ng_max),
+     $           hess(3*nmax+ng_max), pottarg(nth_max*nphi_max),
+     $		 gradtarg(2*(nth_max*nphi_max)), hesstarg(3*(nth_max*nphi_max)),
+     $		 dipstr(nmax+ng_max)
+	
+      dimension poten(nmax+ng_max), wksp(nsp), dipvec(2*(nmax+ng_max)),
+     $          source(2*(nmax+ng_max)),targ(2*(nth_max*nphi_max))
+     
 c
 c Logicals
       logical make_movie, debug
@@ -167,13 +178,15 @@ ccc     1                  zeta, dzeta, igrid, zeta_gr, u_gr)
 ccc         if (mod(it,100).eq.0) then
          call SOL_GRID_FMM (nd, k, nbk, nth, nphi, density, zeta_k,   
      1                      zeta, dzeta, igrid, zeta_gr, u_gr,
-     2                      qa, grad, pot, 
-     3                      nvort, vort_k, zk_vort, gamma_tot)
+     2                      qa,dipstr,grad,pot,gradtarg,pottarg,hess,
+     3		            hesstarg,source,targ,dipvec, 
+     4                      nvort, vort_k, zk_vort, gamma_tot)
          if (debug) then
             call SOL_TAR_FMM (nd, k, nbk, ntar, density, zeta_k,   
-     1                        zeta, dzeta, xz_tar, yz_tar, u_tar, 
-     2                        qa, grad, pot, nvort, 
-     3                        vort_k, zk_vort, gamma_tot)
+     1                       zeta, dzeta, xz_tar, yz_tar, u_tar, 
+     2                       qa,dipstr, grad, pot,pottarg,gradtarg,hess,
+     3			     hesstarg, source,targ,dipvec,nvort, 
+     4                       vort_k, zk_vort, gamma_tot)
 c
 c          for a vortex in presence of cap with radius r0, check solution
             call CHECK_ERROR_TAR (nd, k, nbk, ntar, zeta_k, zeta_tar,  
@@ -903,7 +916,7 @@ c********1*********2*********3*********4*********5*********6*********7**
 c
       subroutine  FASMVP (k, nd, nbk, x_zeta, y_zeta, zeta,    
      1                    dzeta, zeta_k, diag, A_k, u, w, charge,   
-     2                    grad, pot)
+     2                    grad, pot,hess,source,dipstr,dipvec)
 c---------------
 c
       implicit real*8 (a-h, o-z)
@@ -911,8 +924,8 @@ c
      1	       ifgrad,ifhess,ifdipole,k,nd,nbk	
       complex*16 zeta(nbk), dzeta(nbk), charge(nbk), grad(2,nbk), 
      1           zQsum, zQ2sum, eye, zeta_k(k), zdis, 
-     1           dipstr(nbk), pot(nbk), hess(3,nbk)
-      dimension u(*), w(*), x_zeta(nbk), 
+     1           pot(nbk), hess(3,nbk),dipstr(nbk)
+      dimension u(*),w(*), x_zeta(nbk), 
      1          y_zeta(nbk), diag(nbk), A_k(k),
      1          source(2,nbk),dipvec(2,nbk)
       REAL*4 TIMEP(2), ETIME
@@ -921,6 +934,9 @@ c
          eye = DCMPLX(0.D0,1.D0)
          dalph = 2.d0*pi/nd
 c
+	do i = 1,nbk
+		dipstr(i) = dcmplx(u(i),0.d0)
+	end do
 c Calculate A_k
          istart = 0
          do kbod = 1, k
@@ -971,7 +987,6 @@ c Set parameters for FMM call
 	do i = 1,nbk
 	   source(1,i) = x_zeta(i)
 	   source(2,i) = y_zeta(i)
-	   dipstr(i)   = u(i)
 	   dipvec(1,i) = -dimag(dzeta(i))
 	   dipvec(2,i) = dreal(dzeta(i))  		
 	end do
@@ -1325,18 +1340,19 @@ c
 c---------------
       subroutine SOL_GRID_FMM (nd, k, nbk, nth, nphi, u, zeta_k,   
      1                         zeta, dzeta, igrid, zeta_gr, u_gr,
-     2                         qa, grad, pot, 
-     3                         nvort, vort_k, zk_vort, gamma_tot)
+     2                         qa,grad, pot,gradtarg,pottarg,
+     3			       hess,hesstarg,source,targ,dipvec,
+     4                         nvort, vort_k, zk_vort, gamma_tot)
 c---------------
 c
       implicit real*8 (a-h,o-z)
-      dimension u(nbk), igrid(nth,nphi), u_gr(nth,nphi), vort_k(nvort)
+      dimension igrid(nth,nphi), u_gr(nth,nphi), vort_k(nvort)
       complex*16 zeta(nbk), dzeta(nbk), zeta_gr(nth,nphi), zkern, 
      1           zeta_k(k), zdis, eye, qa(*), grad(2,*), zQsum, 
-     2           zQ2sum, zk_vort(nvort),dipstr(nbk),hess(3,nbk)
-     3		,pot(*),pottarg(nth*nphi),gradtarg(2,nth*nphi),
+     2           zQ2sum, zk_vort(nvort),hess(3,nbk),dipstr(nbk)
+     3		,pot(nbk),pottarg(nth*nphi),gradtarg(2,nth*nphi),
      4		hesstarg(3,nth*nphi)
-      dimension source(2,nbk), dipvec(2,nbk), targ(2,nth*nphi)
+      dimension u(nbk),source(2,nbk), dipvec(2,nbk), targ(2,nth*nphi)
       integer*4 iout(2), inform(10), ier,iprec,ifcharge,
      1		ifpot,ifgrad,ifhess,ifdipole,ifpottarg,
      2		ifgradtarg,ifhesstarg,ntarg
@@ -1361,9 +1377,9 @@ c pack zeta and zeta_gr into x_zeta and y_zeta
             zQ2sum = dalph*u(i)*dzeta(i)*dconjg(zeta(i))
      1                   /(1.d0+cdabs(zeta(i))**2)
             zQsum = zQsum - zQ2sum/(2.d0*pi*eye)
-	   dipstr(i) = u(i)
 	   dipvec(1,i) = -dimag(dzeta(i))
 	   dipvec(2,i) = dreal(dzeta(i))
+	   dipstr(i) = dcmplx(u(i),0.d0)
          end do
 	ntarg = nphi*nth
          ij = 0
@@ -1405,7 +1421,7 @@ c Set Parameters for FMM
 
 
 	call lfmm2dparttarg(ier,iprec,nbk,source,ifcharge, 
-     &			charge,ifdipole,dipstr,dipvec,ifpot,
+     &			qa,ifdipole,dipstr,dipvec,ifpot,
      &			pot,ifgrad,grad,ifhess,hess,ntarg,targ,
      &			ifpottarg,pottarg,ifgradtarg,gradtarg,
      &			ifhesstarg,hesstarg) 	
@@ -1446,8 +1462,8 @@ c Fix up field
                u_gr(i,j) = -10.d0
                if (igrid(i,j).ne.0) then     
                   ij = ij + 1
-		pottarg(ij) = dreal(dalph*pottarg(ij)/(2*pi))           
-                  u_gr(i,j) = pot(ij) - zQsum
+		  pottarg(ij) = dreal(dalph*pottarg(ij)/(2*pi))           
+                  u_gr(i,j) = pottarg(ij) - zQsum
                   psi_vort = 0.d0
                   call POINT_VORTEX (zeta_gr(i,j), zeta_k(1), circ)
                   do ivort = 1, nvort
@@ -1482,17 +1498,18 @@ c
 c---------------
       subroutine SOL_TAR_FMM (nd, k, nbk, ntar, u, zeta_k, zeta,  
      1                        dzeta, xz_tar, yz_tar, u_tar, 
-     2                        qa, grad, pot,nvort, 
-     3                        vort_k, zk_vort, gamma_tot)
+     2                        qa,dipstr,grad, pot,gradtarg,pottarg,hess,
+     3			      hesstarg,source,targ,dipvec,nvort, 
+     4                        vort_k, zk_vort, gamma_tot)
 c---------------
 c
       implicit real*8 (a-h,o-z)
-      dimension u(nbk), u_tar(ntar), vort_k(nvort), xz_tar(ntar),
+      dimension u(nbk),u_tar(ntar), vort_k(nvort), xz_tar(ntar),
      1          yz_tar(ntar)
-      complex*16 zeta(nbk), dzeta(nbk), zeta_k(k), zdis, eye, qa(*),
-     1            grad(2,*), zQsum, zQ2sum, zk_vort(nvort), ztar,
-     2		pot(*),hess(3,nbk),pottarg(ntar),
-     3		gradtarg(ntar),hesstarg(ntar),dipstr(nbk) 
+      complex*16 zeta(nbk), dzeta(nbk), zeta_k(k), zdis, eye, qa(nbk),
+     1            grad(2,nbk), zQsum, zQ2sum, zk_vort(nvort), ztar,
+     2		pot(nbk),hess(3,nbk),pottarg(ntar),dipstr(nbk),
+     3		gradtarg(ntar),hesstarg(ntar)
       dimension source(2,nbk),targ(2,ntar),dipvec(2,nbk)
       integer*4 ier,iprec,ifcharge,ifdipole,ifpot,ifgrad,ifhess,
      1          ifpottarg,ifgradtarg,ifhesstarg
@@ -1508,12 +1525,13 @@ c pack zeta and zeta_gr into x_zeta and y_zeta
          do i = 1, nbk
             source(1,i) = dreal(zeta(i))
             source(2,i) = dimag(zeta(i))
-            dipstr(i) = u(i)
             zQ2sum = dalph*u(i)*dzeta(i)*dconjg(zeta(i))
      1                   /(1.d0+cdabs(zeta(i))**2)
             zQsum = zQsum - dreal(zQ2sum/(2.d0*pi*eye))
 	   dipvec(1,i) = -dimag(dzeta(i))
 	   dipvec(2,i) = dreal(dzeta(i))
+	   qa(i) = 0.d0
+	   dipstr(i) = dcmplx(u(i),0.d0)
          end do
          
          do i = 1, ntar
@@ -1547,7 +1565,7 @@ c Set parameters for FMM call
 
 
 	call lfmm2dparttarg(ier,iprec,nbk,source,ifcharge, 
-     &			charge,ifdipole,dipstr,dipvec,ifpot,
+     &			qa,ifdipole,dipstr,dipvec,ifpot,
      &			pot,ifgrad,grad,ifhess,hess,ntar,targ,
      &			ifpottarg,pottarg,ifgradtarg,gradtarg,
      &			ifhesstarg,hesstarg) 	
@@ -1823,7 +1841,9 @@ c
 c
 c Fast Multipole Arrays
 c
-      complex*16 qa(nmax), cfield(2,nmax), poten(nmax)
+      complex*16 qa(nmax), cfield(2,nmax), poten(nmax),hess(3*nmax),
+     1		 dipstr(nmax)
+      dimension source(2*nmax),dipvec(2*nmax)
 c
 c  local work arrays
 c
@@ -1842,7 +1862,7 @@ ccc         call MATVEC_SPHERE (k, nd, nbk, xs, ys, zs, xn, yn, zn,
 ccc     1                       dsda, diag, cx, cy, cz, A_k, xx, yy)
          call FASMVP (k, nd, nbk, x_zeta, y_zeta, zeta, dzeta,   
      1                zeta_k, diag, A_k, xx, yy, qa,   
-     2                cfield, poten)
+     2                cfield, poten,hess,source,dipstr,dipvec)
 ccc         call FASMVP_TEST (k, nd, nbk, nsp, x_zeta, y_zeta, zeta,    
 ccc     1                dzeta, zeta_k, diag, dsda, A_k, xx, yy, qa,   
 ccc     2                cfield, poten, wksp)
