@@ -90,15 +90,14 @@ c pot, grad, hess - at the source points
 c Charges , qa are essentially 0 
 c dipstr - dipole strength is essentially density
 
-      parameter (nsp = 20*nmax + 20*ng_max)
       dimension xat(nmax+ng_max), yat(nmax+ng_max)
-      complex*16 qa(nmax+ng_max), cfield(nmax+ng_max),
+      complex*16 qa(nmax+ng_max),
      $           pot(nmax+ng_max), grad(2*nmax+ng_max),
      $           hess(3*nmax+ng_max), pottarg(nth_max*nphi_max),
      $		 gradtarg(2*(nth_max*nphi_max)), hesstarg(3*(nth_max*nphi_max)),
      $		 dipstr(nmax+ng_max)
 	
-      dimension poten(nmax+ng_max), wksp(nsp), dipvec(2*(nmax+ng_max)),
+      dimension dipvec(2*(nmax+ng_max)),
      $          source(2*(nmax+ng_max)),targ(2*(nth_max*nphi_max))
      
 c
@@ -1197,99 +1196,99 @@ c
 c
 c*************************************************
 c
-      subroutine RESAMPLE (ns,nsk,k0,kk,nsamp,h,z,dz,xat,yat,u,x,y,
-     *                     wksp,nsp)
+c      subroutine RESAMPLE (ns,nsk,k0,kk,nsamp,h,z,dz,xat,yat,u,x,y,
+c     *                     wksp,nsp)
 c
 c  Overresolve the data on the boundary
 c
-      implicit real*8 (a-h,o-z)
-      dimension h(k0:kk),ns(k0:kk),xat(*),yat(*),x(*),y(*)
-      complex*16 z(*),dz(*),u(*),wksp(nsp)
+c      implicit real*8 (a-h,o-z)
+c      dimension h(k0:kk),ns(k0:kk),xat(*),yat(*),x(*),y(*)
+c      complex*16 z(*),dz(*),u(*),wksp(nsp)
 c
-         pi = 4.d0*datan(1.d0)
+c         pi = 4.d0*datan(1.d0)
 c
 c  do z first
 c
-         istart = 0
-         istart2 = 0
-         do nbod = k0,kk
-            nd2 = nsamp*ns(nbod)
-            ndm1 = ns(nbod)-1
-            nd2m1 = nd2-1
-            call FTRPIN (wksp,nsp,ip2,ipt,ndm1,nd2m1)
-            call FINTER (xat(istart+1),x(istart2+1),ndm1,nd2m1,wksp,
-     *                   nsp,ip2,ipt)
-            call FINTER (yat(istart+1),y(istart2+1),ndm1,nd2m1,wksp,
-     *                   nsp,ip2,ipt)
-            do i = 1,nsamp*ns(nbod)
-               z(istart2+i) = dcmplx(x(istart2+i),y(istart2+i))
-            end do
-            istart = istart + ns(nbod)
-            istart2 = istart2 + nsamp*ns(nbod)
-         end do
+c         istart = 0
+c         istart2 = 0
+c         do nbod = k0,kk
+c           nd2 = nsamp*ns(nbod)
+c            ndm1 = ns(nbod)-1
+c            nd2m1 = nd2-1
+c            call FTRPIN (wksp,nsp,ip2,ipt,ndm1,nd2m1)
+c            call FINTER (xat(istart+1),x(istart2+1),ndm1,nd2m1,wksp,
+c     *                   nsp,ip2,ipt)
+c            call FINTER (yat(istart+1),y(istart2+1),ndm1,nd2m1,wksp,
+c     *                   nsp,ip2,ipt)
+c            do i = 1,nsamp*ns(nbod)
+c               z(istart2+i) = dcmplx(x(istart2+i),y(istart2+i))
+c            end do
+c            istart = istart + ns(nbod)
+c            istart2 = istart2 + nsamp*ns(nbod)
+c         end do
 c
 c  now do dz
 c
-         do i = 1,nsk
-            xat(i) = dreal(dz(i))
-            yat(i) = dimag(dz(i))
-         end do
-         istart = 0
-         istart2 = 0
-         do nbod = k0,kk
-            nd2 = nsamp*ns(nbod)
-            ndm1 = ns(nbod)-1
-            nd2m1 = nd2-1
-            call FTRPIN (wksp,nsp,ip2,ipt,ndm1,nd2m1)
-            call FINTER (xat(istart+1),x(istart2+1),ndm1,nd2m1,wksp,
-     *                   nsp,ip2,ipt)
-            call FINTER (yat(istart+1),y(istart2+1),ndm1,nd2m1,wksp,
-     *                   nsp,ip2,ipt)
-            do i = 1,nsamp*ns(nbod)
-               dz(istart2+i) = dcmplx(x(istart2+i),y(istart2+i))
-            end do
-            istart = istart + ns(nbod)
-            istart2 = istart2 + nsamp*ns(nbod)
-         end do
+c         do i = 1,nsk
+c            xat(i) = dreal(dz(i))
+c            yat(i) = dimag(dz(i))
+c         end do
+c         istart = 0
+c         istart2 = 0
+c         do nbod = k0,kk
+c            nd2 = nsamp*ns(nbod)
+c            ndm1 = ns(nbod)-1
+c           nd2m1 = nd2-1
+c            call FTRPIN (wksp,nsp,ip2,ipt,ndm1,nd2m1)
+c            call FINTER (xat(istart+1),x(istart2+1),ndm1,nd2m1,wksp,
+c     *                   nsp,ip2,ipt)
+c            call FINTER (yat(istart+1),y(istart2+1),ndm1,nd2m1,wksp,
+c     *                   nsp,ip2,ipt)
+c            do i = 1,nsamp*ns(nbod)
+c               dz(istart2+i) = dcmplx(x(istart2+i),y(istart2+i))
+c            end do
+c            istart = istart + ns(nbod)
+c            istart2 = istart2 + nsamp*ns(nbod)
+c         end do
 c
 c  now do u
 c
-         do i = 1,nsk
-            xat(i) = dreal(u(i))
-            yat(i) = dimag(u(i))
-         end do
-         istart = 0
-         istart2 = 0
-         do nbod = k0,kk
-            nd2 = nsamp*ns(nbod)
-            ndm1 = ns(nbod)-1
-            nd2m1 = nd2-1
-            call FTRPIN (wksp,nsp,ip2,ipt,ndm1,nd2m1)
-            call FINTER (xat(istart+1),x(istart2+1),ndm1,nd2m1,wksp,
-     *                   nsp,ip2,ipt)
-            call FINTER (yat(istart+1),y(istart2+1),ndm1,nd2m1,wksp,
-     *                   nsp,ip2,ipt)
-            do i = 1,nsamp*ns(nbod)
-               u(istart2+i) = dcmplx(x(istart2+i),y(istart2+i))
-            end do
-            istart = istart + ns(nbod)
-            istart2 = istart2 + nsamp*ns(nbod)
-         end do
+c         do i = 1,nsk
+c            xat(i) = dreal(u(i))
+c            yat(i) = dimag(u(i))
+c         end do
+c         istart = 0
+c         istart2 = 0
+c         do nbod = k0,kk
+c            nd2 = nsamp*ns(nbod)
+c            ndm1 = ns(nbod)-1
+c            nd2m1 = nd2-1
+c            call FTRPIN (wksp,nsp,ip2,ipt,ndm1,nd2m1)
+c            call FINTER (xat(istart+1),x(istart2+1),ndm1,nd2m1,wksp,
+c     *                   nsp,ip2,ipt)
+c            call FINTER (yat(istart+1),y(istart2+1),ndm1,nd2m1,wksp,
+c     *                   nsp,ip2,ipt)
+c            do i = 1,nsamp*ns(nbod)
+c               u(istart2+i) = dcmplx(x(istart2+i),y(istart2+i))
+c           end do
+c            istart = istart + ns(nbod)
+c            istart2 = istart2 + nsamp*ns(nbod)
+c         end do
 c
 c  Update points and stuff
 c
-         nsk = nsamp*nsk
-         do nbod = k0,kk
-            ns(nbod) = nsamp*ns(nbod)
-            h(nbod) = 2.d0*pi/ns(nbod)
-         end do
-         do i = 1,nsk
-            xat(i) = dreal(z(i))
-            yat(i) = dimag(z(i))
-         end do
+c         nsk = nsamp*nsk
+c         do nbod = k0,kk
+c            ns(nbod) = nsamp*ns(nbod)
+c            h(nbod) = 2.d0*pi/ns(nbod)
+c         end do
+c         do i = 1,nsk
+c            xat(i) = dreal(z(i))
+c            yat(i) = dimag(z(i))
+c        end do
 c
-      return
-      end
+c      return
+c      end
 c
 c
 c---------------
