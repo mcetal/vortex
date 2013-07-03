@@ -87,8 +87,8 @@ c Fast Multipole Arrays
       parameter (nsp = 20*nmax + 20*ng_max)
       dimension xat(nmax+ng_max), yat(nmax+ng_max)
       complex*16 qa(nmax+ng_max), cfield(nmax+ng_max),
-     $            pot(nmax+ng_max), grad(2,nmax+ng_max),
-     $            hess(3,nmax+ng_max)
+     $            pot(nmax+ng_max), grad(2*(nmax+ng_max)),
+     $            hess(3*(nmax+ng_max))
       dimension poten(nmax+ng_max), wksp(nsp)
 c
 c Logicals
@@ -165,10 +165,14 @@ ccc     1                  zeta, dzeta, igrid, zeta_gr, u_gr)
          nplot = mod(it,100)
          call PRINF (' nplot = *', nplot, 1)
 ccc         if (mod(it,100).eq.0) then
+c
+c Nisha to fix calling sequence!
          call SOL_GRID_FMM (nd, k, nbk, nth, nphi, density, zeta_k,   
      1                      zeta, dzeta, igrid, zeta_gr, u_gr,
      2                      qa, grad, pot, 
      3                      nvort, vort_k, zk_vort, gamma_tot)
+c
+c Nisha to fix calling sequence!
          if (debug) then
             call SOL_TAR_FMM (nd, k, nbk, ntar, density, zeta_k,   
      1                        zeta, dzeta, xz_tar, yz_tar, u_tar, 
@@ -1447,7 +1451,7 @@ c Fix up field
                if (igrid(i,j).ne.0) then     
                   ij = ij + 1
 		pottarg(ij) = dreal(dalph*pottarg(ij)/(2*pi))           
-                  u_gr(i,j) = pot(ij) - zQsum
+                  u_gr(i,j) = pottarg(ij) - zQsum
                   psi_vort = 0.d0
                   call POINT_VORTEX (zeta_gr(i,j), zeta_k(1), circ)
                   do ivort = 1, nvort

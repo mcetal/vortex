@@ -1,5 +1,5 @@
 close all; clear;
-NX = 50; NY = 101;
+NX = 250; NY = 501;
 % nx = nphi, ny = nth+1
 load igrid.dat
  a = zeros(NX,NY);
@@ -47,9 +47,9 @@ surf(xgrid,ygrid,zgrid,ugrid)
    shading flat
    hold on
    geo_3d
-%   caxis ([-8 6])
+   caxis ([-.5 5])
 figure(3)
-vc = [-1:.02:1];
+vc = [-.5:.1:5];
 contour(xzeta_grid,yzeta_grid,ugrid,vc)
 hold on
 geo_stereo

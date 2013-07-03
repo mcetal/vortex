@@ -7,7 +7,7 @@ SOURCES =dapif1.f dapif2.f dapif3.f dcfft.f matplot.f \
 OBJECTS = $(SOURCES:.f=.o)
 
 #Current Directory 
-DIREC=/set-path-to-vortex-here/
+DIREC=.
 FMMDIREC=$(DIREC)/fmmlib2d-1.2/src
 GMRESDIREC=$(DIREC)/GMRES
 #libraries required
