@@ -1,5 +1,5 @@
 close all; clear;
-NX = 250; NY = 501;
+NX = 1000; NY = 1001;
 % nx = nphi, ny = nth+1
 load igrid.dat
  a = zeros(NX,NY);
