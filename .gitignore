@@ -1,4 +1,9 @@
 *.o
+*.a
+geo_*.m
+x*.dat
+y*.dat
+z*.dat
 *.m~
 make*
 *.atools
@@ -6,3 +11,8 @@ Release/
 .DS_Store
 *.exe
 fort.13
+igrid.dat
+targets*.dat
+u*.dat
+vort_path.m
+*stereo.m
