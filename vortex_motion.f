@@ -69,7 +69,7 @@ c Point Vortices
       parameter (nvortmax = 100)
       dimension vort_k(nvortmax), x1_vort(nvortmax), x2_vort(nvortmax), 
      1          x3_vort(nvortmax)
-      complex*16 zk_vort(nvortmax), zvel(nvortmax)
+      complex*16 zk_vort(nvortmax), zvel(nvortmax), xi_vort
 c
 c  Matrix equation variables for GMRES
 c  MAXL is the maximum nubmer of GMRES iterations performed
@@ -103,7 +103,7 @@ c dipstr - dipole strength is essentially density
      
 c
 c Logicals
-      logical make_movie, debug
+      logical make_movie, debug, crowdy
 c
 c Other arrays
       dimension alpha(nmax), w(nmax), u(nmax)
@@ -125,21 +125,36 @@ c if making a movie (this is not debugged right now!)
          end if
 c
 c set debug = .true. if running the spherical cap case
-         debug = .true.
+c set crowdy = .true. if running the non-uniform channel case
+         crowdy = .true.
+         debug = .false.
 c
 c Read hole geometry data
-         call READ_DATA (k, nd, nbk, nth, nphi, ak, bk, cx, cy, cz, 
+         if (crowdy) then  
+            call CROWDY_DATA (k, nd, nbk, nth, nphi, q_rad, xi_vort,  
+     1                        cx, cy, cz, nvort, x1_vort, x2_vort, 
+     2                        x3_vort, zk_vort, vort_k, gamma_tot, 
+     3                        zeta_k, dt, ntime)
+          else 
+            call READ_DATA (k, nd, nbk, nth, nphi, ak, bk, cx, cy, cz, 
      1                   th_k, phi_k, nvort, x1_vort, x2_vort, x3_vort,
      2                   vort_k, gamma_tot, r0, zeta_k, dt, ntime)
+         end if
 c
 c Construct boundary geometry on surface of sphere
-         call MAKE_GEO (k, nd, nbk, ak, bk, th_k, phi_k, xs, ys, zs,
+         if (crowdy) then
+            call MAKE_CHANNEL (k, nd, nbk, q_rad, xi_vort, xs, ys, zs,
+     1                         zeta, dzeta, x_zeta, y_zeta, diag) 
+          else
+            call MAKE_GEO (k, nd, nbk, ak, bk, th_k, phi_k, xs, ys, zs,
      1                  dx, dy, dz, d2x, d2y, d2z)
+            call STEREO (k, nd, nbk, xs, ys, zs, dx, dy, dz, d2x, d2y, 
+     1                d2z, zeta, dzeta, x_zeta, y_zeta, diag, nvort,  
+     2                x1_vort, x2_vort, x3_vort, zk_vort) 
+         end if
+         stop
 c
 c Get stereo graphic projection
-         call STEREO (k, nd, nbk, xs, ys, zs, dx, dy, dz, d2x, d2y, d2z,
-     1                zeta, dzeta, x_zeta, y_zeta, diag, nvort, x1_vort, 
-     2                x2_vort, x3_vort, zk_vort) 
          call RSCPLOT (zk_vort, nvort, 1, 41)
 c
 c Construct grid on surface of sphere
@@ -185,7 +200,7 @@ c
          if (debug) then
             call SOL_TAR_FMM (nd, k, nbk, ntar, density, zeta_k,   
      1                       zeta, dzeta, xz_tar, yz_tar, u_tar, 
-     2                       qa,dipstr, grad, pot,pottarg,gradtarg,hess,
+     2                       qa,dipstr, grad, pot,gradtarg,pottarg,hess,
      3			     hesstarg, source,targ,dipvec,nvort, 
      4                       vort_k, zk_vort, gamma_tot)
 c
@@ -321,6 +336,114 @@ c
 c
 c********1*********2*********3*********4*********5*********6*********7**
 c
+      subroutine CROWDY_DATA (k, nd, nbk, nth, nphi, q_rad, xi_vort,  
+     1                        cx, cy, cz, nvort, x1_vort, x2_vort, 
+     2                        x3_vort, zk_vort, vort_k, gamma_tot, 
+     3                        zeta_k, dt, ntime)
+c---------------
+c This reads in input data for Crowdy's non-uniform channel example
+c OUTPUT
+c	k	= 2
+c	nd	= number of points per contour
+c	nbk	= total size of system	
+c	nth,nphi
+c		= dimensions of grid for plotting
+c	(cx,cy,cz)
+c		= location of centre in physical coordinates
+c       vort_k	= strength of kth vortex
+c	gamma_tot
+c		= sum of vortex strengths
+c	zeta_k	= hole centres in stereographic plane
+c	dt	= 0	
+c	ntime	= 1
+c       xi_vort = location of vortex in xi plane (alpha in Crowdy's paper)
+c       zk_vort = location of vortex in stereographic plane
+c       q_rad 	= radius of inner circle in xi plane (q in Crowdy's paper)
+c
+      implicit real*8 (a-h,o-z)
+      dimension cx(2), cy(2), cz(2)
+      dimension x1_vort(1), x2_vort(1), x3_vort(1), vort_k(1)
+      complex*16 xi_vort, zeta_k(2), eye, zk_vort(1)
+c
+         eye = dcmplx(0.d0,1.d0)
+c
+         open (unit = 12, file = 'input_crowdy.data')
+         call PRINI (6,13)
+c
+         read (12,*) nd
+         k = 2
+         dt = 0.d0
+         ntime = 1
+         nbk = k*nd
+         call PRINF (' nbk = *', nbk, 1)
+         read (12,*) nth, nphi
+         read (12,*) q_rad
+         read (12,*) vort_k(1), vort_re, vort_im
+         xi_vort = dcmplx(vort_re, vort_im)
+         nvort = 1
+         gamma_tot = vort_k(1)
+         close(12)
+c
+c initialize plotting outputs (6 is to screen, 13 is to fort.13)
+         call PRINI (6,13) 
+c
+c get geometry centres in zeta plane and on sphere
+         zeta_k(2) = xi_vort**2/cdabs(xi_vort)
+         zeta_k(1) = 1.d0/cdabs(xi_vort)
+         do kbod = 1, k
+            call STEREO_TO_SPHERE (zeta_k(kbod), cx(kbod), cy(kbod),
+     1                             cz(kbod))
+         end do
+c
+c location of point vortex
+         zk_vort(1) = 0.d0
+         x1_vort(1) = 0.d0
+         x2_vort(1) = 0.d0
+         x3_vort(1) = -1.d0
+c
+         call PRIN2 (' cx = *', cx, k)
+         call PRIN2 (' cy = *', cy, k)
+         call PRIN2 (' cz = *', cz, k)
+         call PRINF (' nth = *', nth, 1)
+         call PRINF (' nphi = *', nphi, 1)
+         call PRIN2 ('    vort_k = *', vort_k, nvort)
+         call PRIN2 ('    x1_vort = *', x1_vort, nvort)
+         call PRIN2 ('    x2_vort = *', x2_vort, nvort)
+         call PRIN2 ('    x3_vort = *', x3_vort, nvort)
+c
+c be careful if one of the hole centres is at the north pole
+c if it is, nudge it a little
+         eps = 1.d-6
+         do kbod = 1, k
+            check = dabs(cz(kbod)-1.d0)
+            if (check.lt.eps) then
+               cz_s = 0.999d0
+               cx_s = dsqrt(0.5d0*(1-cz_s**2))
+               cy_s = cx_s
+               zeta_k(kbod) = (cx_s + eye*cy_s)/(1.d0-cz_s)
+               write (6,*) 'Fudging hole centre a little'
+               call prin2 (' old centre, cx = *', cx(kbod), 1)
+               call prin2 (' old centre, cy = *', cy(kbod), 1)
+               call prin2 (' old centre, cz = *', cz(kbod), 1)
+               call prin2 (' new centre, cx = *', cx_s, 1)
+               call prin2 (' new centre, cy = *', cy_s, 1)
+               call prin2 (' new centre, cz = *', cz_s, 1)
+            else
+               zeta_k(kbod) = (cx(kbod) + eye*cy(kbod))/(1.d0-cz(kbod))
+            end if
+         end do
+         call PRIN2 (' zeta_k = *', zeta_k, 2*k)
+         open (unit = 22, file = 'vortex_stereo.m')
+            call RSCPLOT_DOT(zk_vort(1),1,1, 22)
+         close(22)
+c
+c
+      return
+      end
+c
+c
+c********1*********2*********3*********4*********5*********6*********7**
+c
       subroutine SPH2CART (theta, phi, r, x, y, z)
 c---------------
       implicit real*8 (a-h,o-z)
@@ -331,6 +454,77 @@ c
 c
       return
       end      
+c
+c
+c********1*********2*********3*********4*********5*********6*********7**
+c
+      subroutine STEREO_TO_SPHERE (zeta, x1, x2, x3)
+c---------------
+c maps point zeta in stereographic plane to point (x1,x2,x3) on sphere
+      implicit real*8 (a-h,o-z)
+      complex*16 eye, zeta
+c
+         eye = dcmplx(0.d0,1.d0)
+c
+         fact = 1+(cdabs(zeta))**2
+         x1 = dreal((zeta+dconjg(zeta))/fact)
+         x2 = dreal(-eye*(zeta-dconjg(zeta))/fact)
+         x3 = (-1.d0+(cdabs(zeta))**2)/fact
+c
+      return
+      end      
+c
+c
+c********1*********2*********3*********4*********5*********6*********7**
+c
+      subroutine CONF_TO_STEREO (xi, xi_vort, zeta)
+c---------------
+c conformal map from xi to stereographic plane (eqn 32 in Crowdy 2008)
+      implicit real*8 (a-h,o-z)
+      complex*16 eye, xi, xi_vort, zeta
+c
+         eye = dcmplx(0.d0,1.d0)
+c
+         zeta = (xi-xi_vort)/(cdabs(xi_vort)*(xi-1.d0/xi_vort))
+c
+      return
+      end      
+c
+c
+c********1*********2*********3*********4*********5*********6*********7**
+c
+      subroutine DCONF_TO_STEREO (xi, xi_vort, dzeta)
+c---------------
+c derivative of 
+c conformal map from xi to stereographic plane (eqn 32 in Crowdy 2008)
+      implicit real*8 (a-h,o-z)
+      complex*16 eye, xi, xi_vort, dzeta
+c
+         eye = dcmplx(0.d0,1.d0)
+c
+         dzeta = 1.d0/(cdabs(xi_vort)*(xi-1.d0/xi_vort))
+     1          -(xi-xi_vort)/(cdabs(xi_vort)*(xi-1.d0/xi_vort)**2)
+c
+      return
+      end      
+c
+c
+c********1*********2*********3*********4*********5*********6*********7**
+c
+      subroutine D2CONF_TO_STEREO (xi, xi_vort, d2zeta)
+c---------------
+c 2nd derivative of 
+c conformal map from xi to stereographic plane (eqn 32 in Crowdy 2008)
+      implicit real*8 (a-h,o-z)
+      complex*16 eye, xi, xi_vort, d2zeta
+c
+         eye = dcmplx(0.d0,1.d0)
+c
+         d2zeta = -2.d0/(cdabs(xi_vort)*(xi-1.d0/xi_vort)**2)
+     1          +2.d0*(xi-xi_vort)/(cdabs(xi_vort)*(xi-1.d0/xi_vort)**3)
+c
+      return
+      end
 c
 c
 c********1*********2*********3*********4*********5*********6*********7**
@@ -444,7 +638,93 @@ c
          d2z = d2xp*xaxis(3) + d2yp*yaxis(3) + d2zp*zaxis(3)
 c
       return
+      end 
+c
+c
+c********1*********2*********3*********4*********5*********6*********7**
+c
+      subroutine MAKE_CHANNEL (k, nd, nbk, q_rad, xi_vort, xs, ys, zs,
+     1                         zeta, dzeta, x_zeta, y_zeta, diag)
+c---------------
+c INPUT
+c	k	= number of contours
+c	nd	= number of points per contour
+c	nbk	= total size of system	
+c       q_rad	= radius of inner cylinder in conformal plane
+c       xi_vort	= vortex location in conformal plane
+c OUTPUT
+c	(xs,ys,zs)	
+c		= coordinates of each point on boundary
+c	zeta = x_zeta + i y_zeta
+c		= boundary points in stereographic plane
+c	dzeta	= derivative of zeta wrt parametrization oriented
+c		  carefully for evaluation of Cauchy integrals
+c	diag	= self-interacting term in integral operator
+c
+      implicit real*8 (a-h,o-z)
+      dimension xs(nbk), ys(nbk), zs(nbk), x_zeta(nbk), y_zeta(nbk),
+     1          diag(nbk)
+      complex*16 eye, xi, xi_vort, zeta(nbk), dzeta(nbk), dzeta_dxi,
+     1           d2zeta_dxi, d2zeta_dth, zextra
+c
+         pi = 4.d0*datan(1.d0)
+         eye = dcmplx(0.d0,1.d0)
+c
+         dalph = 2.d0*pi/nd
+         istart = 0
+         do i = 1, nd
+            xi = cdexp(eye*dalph*(i-1.d0))
+            call CONF_TO_STEREO(xi,xi_vort,zeta(i))
+            call CONF_TO_STEREO(q_rad*xi,xi_vort,zeta(nd+i))
+            call DCONF_TO_STEREO(xi, xi_vort, dzeta_dxi)
+            dzeta(i) = eye*xi*dzeta_dxi
+            dzeta(nd+i) = -eye*xi*q_rad*dzeta_dxi
+            call STEREO_TO_SPHERE(zeta(i),xs(i),ys(i),zs(i))
+            call STEREO_TO_SPHERE(zeta(nd+i),xs(nd+i),ys(nd+i),zs(nd+i))
+c
+c  calculate curvature/diag on outer contour
+            call D2CONF_TO_STEREO(xi,xi_vort,d2zeta_dxi)
+            d2zeta_dth = d2zeta_dxi*(eye*xi)**2 - dzeta(i)*xi
+            xdot = dreal(dzeta(i))
+            ydot = dimag(dzeta(i))
+            ds = cdabs(dzeta(i))
+            xddot = dreal(d2zeta_dth)
+            yddot = dimag(d2zeta_dth)
+            rkappa = (xdot*yddot-ydot*xddot)/ds**3
+            zextra = dzeta(i)*dconjg(zeta(i))/(1.d0+cdabs(zeta(i))**2)
+            zextra = zextra/(2.d0*pi)
+            diag(i) = 0.25d0*rkappa*ds/pi - dimag(zextra)
+c
+c  calculate curvature/diag on inner contour
+            d2zeta_dth = d2zeta_dxi*(q_rad*eye*xi)**2 
+     1                   - dzeta(i)*q_rad*xi
+            xdot = dreal(dzeta(nd+i))
+            ydot = dimag(dzeta(nd+i))
+            ds = cdabs(dzeta(nd+i))
+            xddot = dreal(d2zeta_dth)
+            yddot = dimag(d2zeta_dth)
+            rkappa = (xdot*yddot-ydot*xddot)/ds**3
+            zextra = dzeta(nd+i)*dconjg(zeta(nd+i))
+     1               /(1.d0+cdabs(zeta(nd+i))**2)
+            zextra = zextra/(2.d0*pi)
+            diag(nd+i) = 0.25d0*rkappa*ds/pi - dimag(zextra)            
+         end do
+c
+c dump out for matlab plotting
+         open (unit = 42, file = 'geo_3d.m')
+         open (unit = 11, file = 'geo_stereo.m')
+         is = 1
+         do kbod = 1, k
+            call RS_3D_PLOT (xs(is),ys(is),zs(is), nd, 1, 42)
+            call RSCPLOT (zeta((kbod-1)*nd+1), nd, 1, 11)
+            is = is + nd
+         end do
+         close(42)
+         close(11)
+c
+      return
       end      
+     
 c
 c
 c********1*********2*********3*********4*********5*********6*********7**
