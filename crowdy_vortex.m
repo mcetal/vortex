@@ -50,8 +50,8 @@ x3 = inline('(-1+abs(z).^2)./(1+abs(z).^2)','z')
  xzeta_test = real(zeta_test);
  yzeta_test = imag(zeta_test);
  gtest = true_solution(zeta_test,alpha,q);
- xz_test = z(xzeta_test, alpha);
- yz_test = z(yzeta_test,alpha);
+ xz_test = real(z(zeta_test, alpha));
+ yz_test = imag(z(zeta_test,alpha));
  
 figure(2)
    plot(real(z1),imag(z1),'r')
