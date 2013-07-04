@@ -91,22 +91,16 @@ c Charges , qa are essentially 0
 c dipstr - dipole strength is essentially density
 
       dimension xat(nmax+ng_max), yat(nmax+ng_max)
-<<<<<<< HEAD
-      complex*16 qa(nmax+ng_max), cfield(nmax+ng_max),
-     $            pot(nmax+ng_max), grad(2*(nmax+ng_max)),
-     $            hess(3*(nmax+ng_max))
-      dimension poten(nmax+ng_max), wksp(nsp)
-=======
       complex*16 qa(nmax+ng_max),
      $           pot(nmax+ng_max), grad(2*nmax+ng_max),
      $           hess(3*nmax+ng_max), pottarg(nth_max*nphi_max),
-     $		 gradtarg(2*(nth_max*nphi_max)), hesstarg(3*(nth_max*nphi_max)),
+     $		 gradtarg(2*(nth_max*nphi_max)), 
+     $          hesstarg(3*(nth_max*nphi_max)),
      $		 dipstr(nmax+ng_max)
 	
       dimension dipvec(2*(nmax+ng_max)),
      $          source(2*(nmax+ng_max)),targ(2*(nth_max*nphi_max))
      
->>>>>>> 29dc4d6cd2e0b0f3b0a7e3a649ed996fc25d862f
 c
 c Logicals
       logical make_movie, debug
@@ -183,11 +177,10 @@ ccc     1                  zeta, dzeta, igrid, zeta_gr, u_gr)
          call PRINF (' nplot = *', nplot, 1)
 ccc         if (mod(it,100).eq.0) then
 c
-c Nisha to fix calling sequence!
          call SOL_GRID_FMM (nd, k, nbk, nth, nphi, density, zeta_k,   
      1                      zeta, dzeta, igrid, zeta_gr, u_gr,
-     2                      qa,dipstr,grad,pot,gradtarg,pottarg,hess,
-     3		            hesstarg,source,targ,dipvec, 
+     2                      qa,grad,pot,gradtarg,pottarg,hess,
+     3		             hesstarg,source,targ,dipstr,dipvec, 
      4                      nvort, vort_k, zk_vort, gamma_tot)
          if (debug) then
             call SOL_TAR_FMM (nd, k, nbk, ntar, density, zeta_k,   
@@ -1349,7 +1342,7 @@ c---------------
       subroutine SOL_GRID_FMM (nd, k, nbk, nth, nphi, u, zeta_k,   
      1                         zeta, dzeta, igrid, zeta_gr, u_gr,
      2                         qa,grad, pot,gradtarg,pottarg,
-     3			       hess,hesstarg,source,targ,dipvec,
+     3			        hess,hesstarg,source,targ,dipstr,dipvec,
      4                         nvort, vort_k, zk_vort, gamma_tot)
 c---------------
 c
@@ -1371,10 +1364,10 @@ c
          dalph = 2.d0*pi/nd
          A = -gamma_tot
 c
-ccc         call prin2 (' in sol_grid_fmm, vort_k = *', vort_k, k)
-ccc         call prin2 ('                  zk_vort = *',zk_vort, 2*k)
-ccc         call prin2 ('                  gamma_tot = *', gamma_tot, 1)
-ccc         call prin2 ('                 zeta_k = *', zeta_k, 2*k)
+         call prin2 (' in sol_grid_fmm, vort_k = *', vort_k, k)
+         call prin2 ('                  zk_vort = *',zk_vort, 2*k)
+         call prin2 ('                  gamma_tot = *', gamma_tot, 1)
+         call prin2 ('                 zeta_k = *', zeta_k, 2*k)
 c
 c pack zeta and zeta_gr into x_zeta and y_zeta
          zQsum = 0.d0
@@ -1426,8 +1419,8 @@ c Set Parameters for FMM
 	ifpottarg = 1
 	ifgradtarg = 0
 	ifhesstarg = 0
-
-
+c
+        call prini (0,0)
 	call lfmm2dparttarg(ier,iprec,nbk,source,ifcharge, 
      &			qa,ifdipole,dipstr,dipvec,ifpot,
      &			pot,ifgrad,grad,ifhess,hess,ntarg,targ,
@@ -1453,11 +1446,12 @@ c
             print *, 'ERROR IN FMM: Cannot allocate tree workspace'
             stop
 	   else if(ier.eq.8) then
-		print *, 'ERROR IN FMM: Cannot allocate bulk FMM workspace'
+		print *, 'ERROR IN FMM: Cannot allocate bulk FMM 
+     1                   workspace'
 		stop
 	   else if(ier.eq.16) then
-		print *, 'ERROR IN FMM: Cannot allocate multipole expansion workspace 
-     1			in FMM' 
+		print *, 'ERROR IN FMM: Cannot allocate multipole  
+     1			expansion workspace in FMM' 
 		stop
          end if
 
@@ -1612,7 +1606,7 @@ ccc         call PRIN2 (' a_k in sol_GRID_FMM = *', A_k, k)
 c Fix up field
          do i = 1, ntar
 	   pottarg(i) = (dalph*pottarg(i)/(2*pi))          
-            u_tar(i) = pottarg(i) - zQsum
+            u_tar(i) = dreal(pottarg(i) - zQsum)
             ztar = dcmplx(xz_tar(i),yz_tar(i))
             call POINT_VORTEX (ztar, zeta_k(1), circ)
             psi_vort = 0.d0

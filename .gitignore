@@ -1,4 +1,5 @@
 *.o
+*.m~
 make*
 *.atools
 Release/
