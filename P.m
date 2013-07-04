@@ -1,14 +1,21 @@
 function res = P(zeta, q, N)
-    k = 1:N;
     
-    Q1 = q.^(2*k);
+    R = ones(76,65);
+    for k=1:N
     
-    Q2 =  1 - zeta*Q1;
+            Q1 = q^(2*k);
+        
+            term1 = Q1.*zeta;
     
-    Q = Q2.*(1 - zeta^-1*Q1);
+            term2 = Q1.*(zeta.^-1);
     
-    disp(Q);
+            term3  = 1 + q^(4*k);
     
-    res = (1-zeta)*Q;
+            Q = term3 - term1 - term2;
+            
+            R = R.*Q;
+    end
+    
+    res = R.*(1-zeta);
 end
     
