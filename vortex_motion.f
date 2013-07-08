@@ -104,7 +104,7 @@ c dipstr - dipole strength is essentially density
 c
 c Logicals
       logical make_movie, debug, crowdy
-c
+		
 c Other arrays
       dimension alpha(nmax), w(nmax), u(nmax)
       REAL*4 TIMEP(2), ETIME
@@ -128,7 +128,7 @@ c set debug = .true. if running the spherical cap case
 c set crowdy = .true. if running the non-uniform channel case
          crowdy = .true.
          debug = .false.
-c
+
 c Read hole geometry data
          if (crowdy) then  
             call CROWDY_DATA (k, nd, nbk, nth, nphi, q_rad, xi_vort,  
@@ -197,6 +197,10 @@ c
      2                      qa,grad,pot,gradtarg,pottarg,hess,
      3		             hesstarg,source,targ,dipstr,dipvec, 
      4                      nvort, vort_k, zk_vort, gamma_tot)
+
+	   call CHECK_ERROR(nd, k, nbk, nth, nphi, igrid, u_gr,
+     1                    nvort, vort_k, q_rad, xi_vort)
+
          if (debug) then
             call SOL_TAR_FMM (nd, k, nbk, ntar, density, zeta_k,   
      1                       zeta, dzeta, xz_tar, yz_tar, u_tar, 
@@ -1993,7 +1997,7 @@ c         add on contribution from log at north pole
             zvel(ivort) = zvel(ivort) + A*zgrad
 ccc            call prin2 (' contribution from log = *', A*zgrad, 2)
 c
-c  Calculate final velocity according to Crowdy's formula
+c  Calculate final velocity according to Crowdy`s formula
             zvel(ivort) = dconjg(-eye*0.5*zvel(ivort)*vfactor**2)
          end do
          call PRIN2 (' zvel = *', zvel, 2*nvort)
@@ -2003,34 +2007,42 @@ c
       end
 c
 c
+      
 c---------------
-      subroutine CHECK_ERROR (nd, k, nbk, nth, nphi, zeta_k, igrid, 
-     1                        zeta_gr, u_gr)
+      subroutine CHECK_ERROR (nd, k, nbk, nth, nphi, igrid, 
+     1                        u_gr, nvort, vort_k, q_rad, xi_vort)
 c---------------
 c
       implicit real*8 (a-h,o-z)
       dimension igrid(nth,nphi), u_gr(nth,nphi)
-      complex*16 zeta_gr(nth,nphi), zeta_k(k), eye
+      real(kind=8) q_rad, u_ex, vort_k  
+      complex*16 eye, xi_vort, p1,
+     1  p2,p
+	integer N
+
 c
          pi = 4.d0*datan(1.d0)
          eye = dcmplx(0.d0, 1.d0)
          dalph = 2.d0*pi/nd
-c
-         call PRIn2 (' zeta_k in check_ERROR = *', zeta_k, 2*k)
-         call PRIN2 (' zeta_gr = *', zeta_gr(1,1), 2)
+
+	 N = 100
          err = 0.d0
          do i = 1, nth
             do j = 1, nphi
                if (igrid(i,j).eq.1) then
-               u_ex = 0.d0
-               do mbod = 1, k
-                  u_ex = u_ex + 1.d0/(zeta_gr(i,j)-zeta_k(mbod)) 
-     1                   + dconjg(1.d0/(zeta_gr(i,j)-zeta_k(mbod)))
-               end do
-ccc               u_ex = u_ex + 66.d0 
-               err = max(err,dabs(u_ex-u_gr(i,j)))
-               call PRIN2 ('### u_ex = *', u_ex, 1)
-               call PRIN2 ('    u_gr  = *', u_gr(i,j), 1)
+               		p1 = 1.d0
+		   	p2 = 1.d0
+		   	p  = 1.d0
+			u_ex = 0.d0
+               	    do k = 1, nvort
+		  	call P_SOL(q_rad, xi*(1/xi_vort), p1)
+		  	call P_SOL(q_rad, xi*dconjg(xi_vort), p2)
+		  	p = xi_vort*p1/p2
+		 	u_ex = u_ex - 1/(2*pi)*dlog(cdabs(p))*vort_k(k)
+		    end do
+             		err = max(err,dabs(u_ex-u_gr(i,j)))
+            	call PRIN2 ('### u_ex = *', u_ex, 1)
+              	call PRIN2 ('    u_gr  = *', u_gr(i,j), 1)
                end if
             end do
          end do
@@ -2041,6 +2053,30 @@ c
       end
 c
 c
+c
+c
+c---------------
+	subroutine P_SOL (q_rad, xi, p)
+c---------------
+c
+	real(kind=8) q_rad
+	complex*16 xi, p
+	integer N,i
+
+	N = 100
+	p = dcmplx(1.d0,1.d0)
+
+	do i = 1, N
+		p = p*(1-q_rad**(2*i)*xi)*(1 - q_rad**(2*i)*(1/xi))
+	end do
+
+	p = (1 - xi)*p
+
+	return 
+	
+	end
+c---------------
+
 c---------------
       subroutine CHECK_ERROR_TAR (nd, k, nbk, ntar, zeta_k, zeta_tar,  
      1                            u_tar, nvort, vort_k, zk_vort, r0)
