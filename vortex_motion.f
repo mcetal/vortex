@@ -54,8 +54,8 @@ c  Grid variables
       dimension igrid(ng_max), th_gr(ng_max), phi_gr(ng_max),
      1          u_gr(ng_max), x_gr(ng_max), y_gr(ng_max), z_gr(ng_max),
      2          xzeta_gr(ng_max), yzeta_gr(ng_max), 
-     3          alph_gr(ng_max)
-      complex*16 zeta_gr(ng_max)
+     3          alph_gr(ng_max), xxi_gr(ng_max), yxi_gr(ng_max)
+      complex*16 zeta_gr(ng_max), xi_gr(ng_max)
 c
 c target points are used to check accuracy
       parameter (ntar_max = 1000)
@@ -166,6 +166,14 @@ c grid will be constructed in conformal plane, mapped to both stereographic
 c plane and sphere
 c something similar needs to be done with target_points
 c Nisha to do
+	if (crowdy) then
+	   call CROWDY_GRID(k, nd, nbk, nth, nphi, q_rad,
+     1	    xi_vort, th_k, phi_k,
+     2	    th_gr, phi_gr, x_gr, y_gr, z_gr, zeta_gr, 
+     3          xzeta_gr, yzeta_gr, xi_gr, xxi_gr, yxi_gr,
+     4	    igrid, alph_gr)  
+	else
+
          call SURFACE_GRID (k, nd, nbk, nth, nphi, ak, bk, th_k, phi_k,  
      1                      th_gr, phi_gr, x_gr, y_gr, z_gr, zeta_gr, 
      2                      xzeta_gr, yzeta_gr, igrid, alph_gr)
@@ -177,6 +185,7 @@ c Nisha to do
             call prin2 (' yz_tar = *', yz_tar, ntar)
             ntime = 1
          end if
+       end if
 c
 c Time loop for vortex path
          tbeg = etime(timep)
@@ -958,6 +967,124 @@ c
       end      
 c
 c
+c********1*********2*********3*********4*********5*********6*********7**
+c
+	subroutine CROWDY_GRID(k, nd, nbk, nth, nphi, q_rad,
+     1	    xi_vort, th_k, phi_k,
+     2 	    th_gr, phi_gr, x_gr, y_gr, z_gr, zeta_gr, 
+     3          xzeta_gr, yzeta_gr, xi_gr, xxi_gr, yxi_gr,
+     4	    igrid, alph_gr)  
+c
+c-------------------
+c Constructs grid points on surface of sphere for plotting solution
+c in domain
+c INPUT
+c	k	= number of contours
+c	nd	= number of points per contour
+c	nbk	= total size of system	
+c	(nth,nphi)
+c		= number of grid points in theta and phi directions
+c	ak,bk	= major/minor axes of ellipses
+c	(th_k,phi_k)	
+c		= hole centres in spherical coordinates
+c OUTPUT
+c	(th_gr,phi_gr)	
+c		= (theta,phi) values at grid points
+c	(x_gr,y_gr,z_gr)			
+c		= (x,y,z) values at grid points (on sphere)
+c	zeta_gr	= grid point locations in stereographic plane	
+c		= xzeta_gr + i yzeta_gr
+c     xi_gr =       grid point locations in the conformal plane
+c     	=
+c     xxi_gr + i yxi_gr
+c
+c	igrid(i,j)	
+c		= 1 if (i,j)th point is in domain, 0 otherwise
+c	alph_gr	= ignore this - might be used for matlab plotting
+	
+
+	implicit none
+	integer k, nd, nbk, nth, nphi, igrid(nth, nphi), 
+     1		  i, j
+	real(kind=8) q_rad, x_gr(nth, nphi),
+     1             y_gr(nth, nphi), z_gr(nth, nphi), 
+     2             xzeta_gr(nth, nphi), yzeta_gr(nth, nphi),
+     3             th_k(k), phi_k(k), th_gr(nth, nphi),
+     4             phi_gr(nth, nphi),
+     5             xxi_gr(nth, nphi),
+     6	       yxi_gr(nth, nphi), 
+     7		 alph_gr(nth, nphi), pi, radmax,
+     8             eps, fac, rad, dalph, theta, drad
+
+	complex*16 xi_vort, zeta_gr(nth, nphi),
+     1		     eye, xi_gr(nth, nphi)
+
+	eye = dcmplx(0.d0,0.d0)
+	pi = datan(1.d0)*4.d0
+	
+c Setting the value of epsilon - buffer zone to ensure
+c grid points are not too close to the boundary
+	radmax = 1.d0
+	fac = 2.d0
+	eps = fac*2*pi*radmax/nd
+
+	rad = q_rad + eps
+	dalph = 2*pi/nphi 
+	drad  = (radmax-q_rad-2*eps)/nth
+
+c Putting points along circles with radius rad
+	
+	do i = 1, nth
+		theta = 0.d0
+		do j = 1, nphi
+			igrid(i,j) = 1
+			xi_gr(i, j) = rad*cdexp(eye*theta)
+			xxi_gr(i, j) = dreal(xi_gr(i, j))
+			yxi_gr(i, j) = dimag(xi_gr(i, j))	
+
+			theta = theta + dalph
+			call CONF_TO_STEREO (xi_gr(i, j), 
+     1					xi_vort, zeta_gr(i, j))
+			xzeta_gr(i, j) = dreal(zeta_gr(i, j))
+			yzeta_gr(i, j) = dimag(zeta_gr(i, j ))
+
+			call STEREO_TO_SPHERE (zeta_gr(i, j),
+     1			x_gr(i, j), y_gr(i, j), z_gr(i, j))
+			
+									
+		end do
+		rad = rad + drad
+			
+	end do
+
+c dump out for matlab plotting
+         open (unit = 111, file = 'igrid.dat')
+         open (unit = 121, file = 'xgrid.dat')
+         open (unit = 131, file = 'ygrid.dat')
+         open (unit = 141, file = 'zgrid.dat')
+         open (unit = 151, file = 'xzeta_grid.dat')
+         open (unit = 161, file = 'yzeta_grid.dat')
+            call DUMP (nth, nphi, x_gr, igrid, 0, 111)
+            call DUMP (nth, nphi, x_gr, igrid, 1, 121)
+            call DUMP (nth, nphi, y_gr, igrid, 1, 131)
+            call DUMP (nth, nphi, z_gr, igrid, 1, 141)
+            call DUMP (nth, nphi, xzeta_gr, igrid, 1, 151)
+            call DUMP (nth, nphi, yzeta_gr, igrid, 1, 161)
+         close(111)
+         close(121)
+         close(131)
+         close(141)
+         close(151)
+         close(161)
+c
+
+		
+	return	
+	
+	end subroutine CROWDY_GRID 
+
+   
+
 c********1*********2*********3*********4*********5*********6*********7**
 c
       subroutine TARGET_POINTS (k, nd, nbk, ak, bk, th_k, phi_k, ntar,
