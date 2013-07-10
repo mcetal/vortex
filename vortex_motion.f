@@ -143,6 +143,9 @@ c Read hole geometry data
 c
 c Construct boundary geometry on surface of sphere
          if (crowdy) then
+c
+c make_channel has not been debugged, in particular, I need to check 
+c derivative info with ffts (mck to do)
             call MAKE_CHANNEL (k, nd, nbk, q_rad, xi_vort, xs, ys, zs,
      1                         zeta, dzeta, x_zeta, y_zeta, diag) 
           else
@@ -158,6 +161,11 @@ c Get stereo graphic projection
          call RSCPLOT (zk_vort, nvort, 1, 41)
 c
 c Construct grid on surface of sphere
+c to do: add in new subroutine to construct grid for Crowdy example
+c grid will be constructed in conformal plane, mapped to both stereographic
+c plane and sphere
+c something similar needs to be done with target_points
+c Nisha to do
          call SURFACE_GRID (k, nd, nbk, nth, nphi, ak, bk, th_k, phi_k,  
      1                      th_gr, phi_gr, x_gr, y_gr, z_gr, zeta_gr, 
      2                      xzeta_gr, yzeta_gr, igrid, alph_gr)
@@ -202,11 +210,13 @@ c
      3		             hesstarg,source,targ,dipstr,dipvec, 
      4                      nvort, vort_k, zk_vort, gamma_tot)
 
-	   call CHECK_ERROR(nd, k, nbk, nth, nphi, zeta_gr,
-     1		           igrid, u_gr,
-     2                    nvort, vort_k, q_rad, xi_vort)
+ccc	   call CHECK_ERROR(nd, k, nbk, nth, nphi, zeta_gr,
+ccc     1		           igrid, u_gr,
+ccc     2                    nvort, vort_k, q_rad, xi_vort)
 
          if (debug) then
+c
+c if we are testing crowdy's solution, we should also be in here
             call SOL_TAR_FMM (nd, k, nbk, ntar, density, zeta_k,   
      1                       zeta, dzeta, xz_tar, yz_tar, u_tar, 
      2                       qa,dipstr, grad, pot,gradtarg,pottarg,hess,
@@ -214,6 +224,9 @@ c
      4                       vort_k, zk_vort, gamma_tot)
 c
 c          for a vortex in presence of cap with radius r0, check solution
+c  also need to check solution for crowdy's channel, check_error_tar
+c  will need to add in Crowdy's solution here
+c  Nisha to do
             call CHECK_ERROR_TAR (nd, k, nbk, ntar, zeta_k, zeta_tar,  
      1                            u_tar, nvort, vort_k, zk_vort, r0)
          end if
