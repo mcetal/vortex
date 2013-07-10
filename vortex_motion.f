@@ -152,7 +152,7 @@ c Construct boundary geometry on surface of sphere
      1                d2z, zeta, dzeta, x_zeta, y_zeta, diag, nvort,  
      2                x1_vort, x2_vort, x3_vort, zk_vort) 
          end if
-         stop
+c         stop
 c
 c Get stereo graphic projection
          call RSCPLOT (zk_vort, nvort, 1, 41)
@@ -172,6 +172,10 @@ c Construct grid on surface of sphere
 c
 c Time loop for vortex path
          tbeg = etime(timep)
+	   if (debug) then
+      	print *, "entering time loop"
+	   end if
+		
          do it = 1, ntime
             time = it*dt  
             call PRIN2 (' TIME = *', time, 1)       
@@ -198,8 +202,9 @@ c
      3		             hesstarg,source,targ,dipstr,dipvec, 
      4                      nvort, vort_k, zk_vort, gamma_tot)
 
-	   call CHECK_ERROR(nd, k, nbk, nth, nphi, igrid, u_gr,
-     1                    nvort, vort_k, q_rad, xi_vort)
+	   call CHECK_ERROR(nd, k, nbk, nth, nphi, zeta_gr,
+     1		           igrid, u_gr,
+     2                    nvort, vort_k, q_rad, xi_vort)
 
          if (debug) then
             call SOL_TAR_FMM (nd, k, nbk, ntar, density, zeta_k,   
@@ -913,7 +918,8 @@ c
                   alph_gr(i,j) = 0.1
                end if
             end do
-         end do 
+         end do
+ 
 c
 c dump out for matlab plotting
          open (unit = 31, file = 'igrid.dat')
@@ -2009,7 +2015,7 @@ c
 c
       
 c---------------
-      subroutine CHECK_ERROR (nd, k, nbk, nth, nphi, igrid, 
+      subroutine CHECK_ERROR (nd, k, nbk, nth, nphi, zeta_gr,igrid, 
      1                        u_gr, nvort, vort_k, q_rad, xi_vort)
 c---------------
 c
@@ -2021,9 +2027,12 @@ c
 	integer N
 
 c
-         pi = 4.d0*datan(1.d0)
+	 pi = 4.d0*datan(1.d0)
          eye = dcmplx(0.d0, 1.d0)
          dalph = 2.d0*pi/nd
+c       To get xi , either write a 
+c       subroutine to stereo2conf mapping
+c       or set up grid in the conformal plane.
 
 	 N = 100
          err = 0.d0
@@ -2039,6 +2048,7 @@ c
 		  	call P_SOL(q_rad, xi*dconjg(xi_vort), p2)
 		  	p = xi_vort*p1/p2
 		 	u_ex = u_ex - 1/(2*pi)*dlog(cdabs(p))*vort_k(k)
+			print *, "u exact is:", u_ex
 		    end do
              		err = max(err,dabs(u_ex-u_gr(i,j)))
             	call PRIN2 ('### u_ex = *', u_ex, 1)
