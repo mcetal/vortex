@@ -1388,7 +1388,8 @@ C
       IMPLICIT REAL *8 (A-H,O-Z)
       INTEGER *4 NPTS,LW,IPT,NSC
       COMPLEX *16 FVALUE(NPTS),FDERIV(NPTS)
-      COMPLEX *16 WORK(1),EYE
+      COMPLEX *16 EYE
+      dimension work(*)
 C
          EYE = DCMPLX(0.0d0,1.0d0)
 c

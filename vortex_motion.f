@@ -104,6 +104,10 @@ c dipstr - dipole strength is essentially density
 c
 c Logicals
       logical make_movie, debug, crowdy
+c
+c arrays for fft
+      complex*16 zf1(nmax), zf2(nmax), zf3(nmax)
+      dimension wsave(4*nmax+15)
 		
 c Other arrays
       dimension alpha(nmax), w(nmax), u(nmax)
@@ -147,7 +151,8 @@ c
 c make_channel has not been debugged, in particular, I need to check 
 c derivative info with ffts (mck to do)
             call MAKE_CHANNEL (k, nd, nbk, q_rad, xi_vort, xs, ys, zs,
-     1                         zeta, dzeta, x_zeta, y_zeta, diag) 
+     1                         zeta, dzeta, x_zeta, y_zeta, diag,
+     2                         zf1, zf2, zf3, wsave) 
           else
             call MAKE_GEO (k, nd, nbk, ak, bk, th_k, phi_k, xs, ys, zs,
      1                  dx, dy, dz, d2x, d2y, d2z)
@@ -533,8 +538,8 @@ c conformal map from xi to stereographic plane (eqn 32 in Crowdy 2008)
 c
          eye = dcmplx(0.d0,1.d0)
 c
-         dzeta = 1.d0/(cdabs(xi_vort)*(xi-1.d0/xi_vort))
-     1          -(xi-xi_vort)/(cdabs(xi_vort)*(xi-1.d0/xi_vort)**2)
+         dzeta = (xi_vort-1.d0/xi_vort)
+     1            /(cdabs(xi_vort)*(xi-1.d0/xi_vort)**2)
 c
       return
       end      
@@ -675,7 +680,8 @@ c
 c********1*********2*********3*********4*********5*********6*********7**
 c
       subroutine MAKE_CHANNEL (k, nd, nbk, q_rad, xi_vort, xs, ys, zs,
-     1                         zeta, dzeta, x_zeta, y_zeta, diag)
+     1                         zeta, dzeta, x_zeta, y_zeta, diag, 
+     2                         zf1, zf2, zf3, wsave)
 c---------------
 c INPUT
 c	k	= number of contours
@@ -683,6 +689,9 @@ c	nd	= number of points per contour
 c	nbk	= total size of system	
 c       q_rad	= radius of inner cylinder in conformal plane
 c       xi_vort	= vortex location in conformal plane
+c       zf1, zf2, zf3
+c             	= work arrays for debugging with fft
+c       wsave	= work array for fft
 c OUTPUT
 c	(xs,ys,zs)	
 c		= coordinates of each point on boundary
@@ -694,12 +703,14 @@ c	diag	= self-interacting term in integral operator
 c
       implicit real*8 (a-h,o-z)
       dimension xs(nbk), ys(nbk), zs(nbk), x_zeta(nbk), y_zeta(nbk),
-     1          diag(nbk)
-      complex*16 eye, xi, xi_vort, zeta(nbk), dzeta(nbk), dzeta_dxi,
-     1           d2zeta_dxi, d2zeta_dth, zextra
+     1          diag(nbk), wsave(*)
+      complex*16 eye, xi, xi_vort, zeta(nbk), dzeta(nbk), dzeta_dxi1,
+     1           d2zeta_dxi1, d2zeta_dth, zextra, zf1(nd), zf2(nd), 
+     2           zf3(nd), dzeta_dxi2, d2zeta_dxi2
 c
          pi = 4.d0*datan(1.d0)
          eye = dcmplx(0.d0,1.d0)
+         call prin2 (' in make_channel, q_rad = *', q_rad, 1)
 c
          dalph = 2.d0*pi/nd
          istart = 0
@@ -707,15 +718,16 @@ c
             xi = cdexp(eye*dalph*(i-1.d0))
             call CONF_TO_STEREO(xi,xi_vort,zeta(i))
             call CONF_TO_STEREO(q_rad*xi,xi_vort,zeta(nd+i))
-            call DCONF_TO_STEREO(xi, xi_vort, dzeta_dxi)
-            dzeta(i) = eye*xi*dzeta_dxi
-            dzeta(nd+i) = -eye*xi*q_rad*dzeta_dxi
+            call DCONF_TO_STEREO(xi, xi_vort, dzeta_dxi1)
+            dzeta(i) = eye*xi*dzeta_dxi1
+            call DCONF_TO_STEREO(q_rad*xi, xi_vort, dzeta_dxi2)
+            dzeta(nd+i) = -eye*xi*q_rad*dzeta_dxi2
             call STEREO_TO_SPHERE(zeta(i),xs(i),ys(i),zs(i))
             call STEREO_TO_SPHERE(zeta(nd+i),xs(nd+i),ys(nd+i),zs(nd+i))
 c
 c  calculate curvature/diag on outer contour
-            call D2CONF_TO_STEREO(xi,xi_vort,d2zeta_dxi)
-            d2zeta_dth = d2zeta_dxi*(eye*xi)**2 - dzeta(i)*xi
+            call D2CONF_TO_STEREO(xi,xi_vort,d2zeta_dxi1)
+            d2zeta_dth = d2zeta_dxi1*(eye*xi)**2 - dzeta_dxi1*xi
             xdot = dreal(dzeta(i))
             ydot = dimag(dzeta(i))
             ds = cdabs(dzeta(i))
@@ -727,8 +739,9 @@ c  calculate curvature/diag on outer contour
             diag(i) = 0.25d0*rkappa*ds/pi - dimag(zextra)
 c
 c  calculate curvature/diag on inner contour
-            d2zeta_dth = d2zeta_dxi*(q_rad*eye*xi)**2 
-     1                   - dzeta(i)*q_rad*xi
+            call D2CONF_TO_STEREO(q_rad*xi,xi_vort,d2zeta_dxi2)
+            d2zeta_dth = d2zeta_dxi2*(q_rad*eye*xi)**2 
+     1                   - dzeta_dxi2*q_rad*xi
             xdot = dreal(dzeta(nd+i))
             ydot = dimag(dzeta(nd+i))
             ds = cdabs(dzeta(nd+i))
@@ -740,6 +753,48 @@ c  calculate curvature/diag on inner contour
             zextra = zextra/(2.d0*pi)
             diag(nd+i) = 0.25d0*rkappa*ds/pi - dimag(zextra)            
          end do
+c
+c debug using ffts
+         call DCFFTI(nd, wsave)
+         istart = 0
+         do kbod = 1, 2
+            call PRINF ('In MAKE_CHANNEL, kbod = *', kbod, 1)
+            do i = 1, nd
+               zf1(i) = zeta(istart+i)
+            end do
+            call FDIFFF(zf1,zf2,nd,wsave)
+            call FDIFFF(zf2,zf3,nd,wsave)
+            err1 = 0.d0
+            err2 = 0.d0
+            do i = 1, nd
+               if (kbod.eq.1) then
+                  error = cdabs(zf2(i) - dzeta(istart+i))
+                  xdot = dreal(zf2(i))
+                  xddot = dreal(zf3(i))
+                  ydot = dimag(zf2(i))
+                  yddot = dimag(zf3(i))
+                 else
+                  xdot = -dreal(zf2(i))
+                  xddot = dreal(zf3(i))
+                  ydot = -dimag(zf2(i))
+                  yddot = dimag(zf3(i))
+                  error = cdabs(-zf2(i) - dzeta(istart+i))
+               end if
+               ds = cdabs(zf2(i))
+               rkappa = (xdot*yddot-ydot*xddot)/ds**3
+               zextra = dzeta(istart+i)*dconjg(zeta(istart+i))
+     1                  /(1.d0+cdabs(zeta(istart+i))**2)
+               zextra = zextra/(2.d0*pi)
+               diag_fft = 0.25d0*rkappa*ds/pi - dimag(zextra)            
+               err1 = max(err1,error)
+               err2 = max(err2,dabs(diag_fft-diag(istart+i)))
+            end do
+            call PRIN2 (' ERROR IN FIRST DERIVATIVE = *', err1, 1)
+            call PRIN2 (' ERROR IN DIAG TERM = *', err2, 1)
+            istart = istart + nd
+         end do
+         stop
+            
 c
 c dump out for matlab plotting
          open (unit = 42, file = 'geo_3d.m')
