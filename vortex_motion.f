@@ -1095,7 +1095,7 @@ c	alph_gr	= ignore this - might be used for matlab plotting
 	complex*16 xi_vort, zeta_gr(nth, nphi),
      1		     eye, xi_gr(nth, nphi)
 
-	eye = dcmplx(0.d0,0.d0)
+	eye = dcmplx(0.d0,1.d0)
 	pi = datan(1.d0)*4.d0
 	
 c Setting the value of epsilon - buffer zone to ensure
@@ -1140,18 +1140,29 @@ c dump out for matlab plotting
          open (unit = 141, file = 'zgrid.dat')
          open (unit = 151, file = 'xzeta_grid.dat')
          open (unit = 161, file = 'yzeta_grid.dat')
+	   open (unit = 171, file = 'xxi_grid.dat')
+	   open (unit = 181, file = 'yxi_grid.dat')
+	   open (unit = 191, file = 'xi_grid.dat')
             call DUMP (nth, nphi, x_gr, igrid, 0, 111)
             call DUMP (nth, nphi, x_gr, igrid, 1, 121)
             call DUMP (nth, nphi, y_gr, igrid, 1, 131)
             call DUMP (nth, nphi, z_gr, igrid, 1, 141)
             call DUMP (nth, nphi, xzeta_gr, igrid, 1, 151)
             call DUMP (nth, nphi, yzeta_gr, igrid, 1, 161)
+		call DUMP (nth, nphi, xxi_gr,   igrid, 1, 171)
+            call DUMP (nth, nphi, yxi_gr,   igrid, 1, 181)
+		call DUMP (nth, nphi, xi_gr,    igrid, 1, 191)
          close(111)
          close(121)
          close(131)
          close(141)
          close(151)
          close(161)
+	   close(171)
+	   close(181)
+	   close(191)
+
+
 c
 
 		
