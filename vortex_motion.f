@@ -133,7 +133,7 @@ c
 c set debug = .true. if running the spherical cap case
 c set crowdy = .true. if running the non-uniform channel case
          crowdy = .true.
-         debug = .false.
+         debug = .true.
 
 c Read hole geometry data
          if (crowdy) then  
@@ -250,10 +250,20 @@ c          for a vortex in presence of cap with radius r0, check solution
 c  also need to check solution for crowdy's channel, check_error_tar
 c  will need to add in Crowdy's solution here
 c  Nisha to do
+		if (crowdy) then
+
+		 call CHECK_CROWDY_ERROR_TAR(nd, k, nbk, ntar, 
+     1						    xi_vort, q_rad
+     2                                  xi_tar, u_tar, vort_k, nvort)
+		else
             call CHECK_ERROR_TAR (nd, k, nbk, ntar, zeta_k, zeta_tar,  
      1                            u_tar, nvort, vort_k, zk_vort, r0)
-         end if
-         if (make_movie) then
+		end if
+
+       end if
+         
+	
+	if (make_movie) then
             call DUMP_MOVIE_ALL (nth, nphi, time, u_gr, it, 37)
             call DUMP_MOVIE_VORT (nth, nphi, time, zk_vort(1), u_gr, 
      1                            it, 37)
@@ -692,7 +702,6 @@ c
       subroutine MAKE_CHANNEL (k, nd, nbk, q_rad, xi_vort, xs, ys, zs,
      1                         zeta, dzeta, x_zeta, y_zeta, diag, 
      2                         zf1, zf2, zf3, wsave)
-
 c---------------
 c INPUT
 c	k	= number of contours
@@ -700,6 +709,9 @@ c	nd	= number of points per contour
 c	nbk	= total size of system	
 c       q_rad	= radius of inner cylinder in conformal plane
 c       xi_vort	= vortex location in conformal plane
+c       zf1, zf2, zf3
+c             	= work arrays for debugging with fft
+c       wsave	= work array for fft
 c OUTPUT
 c	(xs,ys,zs)	
 c		= coordinates of each point on boundary
@@ -715,12 +727,10 @@ c
       complex*16 eye, xi, xi_vort, zeta(nbk), dzeta(nbk), dzeta_dxi1,
      1           d2zeta_dxi1, d2zeta_dth, zextra, zf1(nd), zf2(nd), 
      2           zf3(nd), dzeta_dxi2, d2zeta_dxi2
-
 c
          pi = 4.d0*datan(1.d0)
          eye = dcmplx(0.d0,1.d0)
-	 call prin2 (' in make_channel, q_rad = *', q_rad, 1)
-
+         call prin2 (' in make_channel, q_rad = *', q_rad, 1)
 c
          dalph = 2.d0*pi/nd
          istart = 0
@@ -734,7 +744,6 @@ c
             dzeta(nd+i) = -eye*xi*q_rad*dzeta_dxi2
             call STEREO_TO_SPHERE(zeta(i),xs(i),ys(i),zs(i))
             call STEREO_TO_SPHERE(zeta(nd+i),xs(nd+i),ys(nd+i),zs(nd+i))
-
 c
 c  calculate curvature/diag on outer contour
             call D2CONF_TO_STEREO(xi,xi_vort,d2zeta_dxi1)
@@ -753,7 +762,6 @@ c  calculate curvature/diag on inner contour
             call D2CONF_TO_STEREO(q_rad*xi,xi_vort,d2zeta_dxi2)
             d2zeta_dth = d2zeta_dxi2*(q_rad*eye*xi)**2 
      1                   - dzeta_dxi2*q_rad*xi
-
             xdot = dreal(dzeta(nd+i))
             ydot = dimag(dzeta(nd+i))
             ds = cdabs(dzeta(nd+i))
@@ -805,7 +813,7 @@ c debug using ffts
             call PRIN2 (' ERROR IN DIAG TERM = *', err2, 1)
             istart = istart + nd
          end do
-         stop
+c         stop
             
 c
 c dump out for matlab plotting
@@ -823,6 +831,7 @@ c
       return
       end      
      
+c
 c
 c
 c********1*********2*********3*********4*********5*********6*********7**
@@ -2344,7 +2353,7 @@ c
 c---------------
 
 c---------------
-      subroutine CHECK_ERROR_TAR (nd, k, nbk, ntar, zeta_k, zeta_tar,  
+      subroutine CHECK_ERROR_TAR (nd, k, nbk, ntar, xi_vort,xi_tar,  
      1                            u_tar, nvort, vort_k, zk_vort, r0)
 c---------------
 c
@@ -2383,7 +2392,63 @@ c
 c
       return
       end
+
 c
+c
+c*******1**********2*********3*********4*********5*********6*********7**
+c
+	subroutine CHECK_CROWDY_ERROR_TAR(nd, k, nbk, ntar, 
+     1					    xi_vort, q_rad,
+     2                                  xi_tar, u_tar, vort_k, nvort)
+
+c Exact solution is obtained from Equation 8.20 of 
+c Crowdy, Marshall 2005.
+
+	implicit none
+	integer nd, k, nbk, ntar, nvort, N, i
+	real(kind=8) u_tar(ntar), vort_k(nvort), 
+     1		 pi, dalph, err,
+     2             q_rad, u_ex
+	complex*16 eye, xi_vort, xi_tar(ntar),
+     1          p, p1, p2
+
+	
+	pi = 4.d0*datan(1.d0)
+      eye = dcmplx(0.d0, 1.d0)
+      dalph = 2.d0*pi/nd
+
+	N = 100
+      err = 0.d0
+      do i= 1, ntar
+               	p1 = 1.d0
+		   	p2 = 1.d0
+		   	p  = 1.d0
+			u_ex = 0.d0
+               	do k = 1, nvort
+		  		call P_SOL(q_rad, xi_tar(i)*(1/xi_vort),
+     1							 p1)
+		  		call P_SOL(q_rad, xi_tar(i)*dconjg(xi_vort),
+     1							 p2)
+		  		p = xi_vort*p1/p2
+		 		u_ex = u_ex - 
+     1				1/(2*pi)*dlog(cdabs(p))*vort_k(k)
+				print *, "u exact is:", u_ex
+		     end do
+             	err = max(err,dabs(u_ex-u_tar(i)))
+            	call PRIN2 ('### u_ex = *', u_ex, 1)
+              	call PRIN2 ('    u_gr  = *', u_tar(i), 1)
+      end do
+         
+         call PRIN2 (' max error in solution on grid = *', err, 1)
+c
+c
+
+
+
+	return
+	end subroutine CHECK_CROWDY_ERROR_TAR
+	
+
 C********************************************************************
       SUBROUTINE MSOLVE(N, R, Z, NELT, IA, JA, A, ISYM, RWORK, IWORK)
 C********************************************************************
