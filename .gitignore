@@ -1,3 +1,4 @@
+GMRES/
 *.o
 *.a
 geo_*.m

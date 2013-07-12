@@ -181,7 +181,7 @@ ccc      write (iw,1400) x(1),y(1)
 1400  FORMAT(2D15.6)
       write(iw,*) ' xx = x(:,1);'
       write(iw,*) ' yy = x(:,2);'
-      write(iw, *) ' plot(xx,yy,''r.'',''MarkerSize'',0.5)'
+      write(iw, *) ' plot(xx,yy,''r*'',''MarkerSize'',0.5)'
 ccc      write(iw, *) ' plot(xx,yy,'' . '' )'
       write(iw,*) 'axis equal'
 ccc      write(iw, *) ' plot(x)'
