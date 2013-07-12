@@ -1,5 +1,5 @@
 close all; clear;
-NX = 1000; NY = 1001;
+NX = 50; NY = 51;
 % nx = nphi, ny = nth+1
 load igrid.dat
  a = zeros(NX,NY);
@@ -29,6 +29,14 @@ load yzeta_grid.dat
  a = zeros(NX,NY);
  a(:) = yzeta_grid(:);
  yzeta_grid = a;
+ load xxi_grid.dat
+ a = zeros(NX,NY);
+ a(:) = xxi_grid(:);
+ xxi_grid = a;
+ load yxi_grid.dat
+ a = zeros(NX,NY);
+ a(:) = yxi_grid(:);
+ yxi_grid = a;
 load ugrid.dat
  a = zeros(NX,NY);
  a(:) = ugrid(:);
@@ -52,5 +60,11 @@ figure(3)
 vc = [-.5:.1:5];
 contour(xzeta_grid,yzeta_grid,ugrid,vc)
 hold on
-geo_stereo
+figure(4)
+contour(xxi_grid, yxi_grid, ugrid, 100)
+hold on
+figure(5)
+plot(xxi_grid, yxi_grid)
+hold on
+%geo_stereo
 %axis ([-15 7 -15 15])

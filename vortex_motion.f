@@ -169,11 +169,6 @@ c Get stereo graphic projection
          call RSCPLOT (zk_vort, nvort, 1, 41)
 c
 c Construct grid on surface of sphere
-c to do: add in new subroutine to construct grid for Crowdy example
-c grid will be constructed in conformal plane, mapped to both stereographic
-c plane and sphere
-c something similar needs to be done with target_points
-c Nisha to do
 	if (crowdy) then
 	   call CROWDY_GRID(k, nd, nbk, nth, nphi, q_rad,
      1	    xi_vort, th_k, phi_k, th_gr, 
@@ -204,7 +199,7 @@ c
 c Time loop for vortex path
          tbeg = etime(timep)
 	   if (debug) then
-      	print *, "entering time loop"
+		print *, "entering time loop"
 	   end if
 		
          do it = 1, ntime
@@ -223,62 +218,62 @@ c
 c Construct solution on surface grid
 ccc         call SOL_GRID (nd, k, nbk, nth, nphi, density, A_k, zeta_k,   
 ccc     1                  zeta, dzeta, igrid, zeta_gr, u_gr)
-         nplot = mod(it,100)
-         call PRINF (' nplot = *', nplot, 1)
+            nplot = mod(it,100)
+            call PRINF (' nplot = *', nplot, 1)
 ccc         if (mod(it,100).eq.0) then
 c
-         call SOL_GRID_FMM (nd, k, nbk, nth, nphi, density, zeta_k,   
+            call SOL_GRID_FMM (nd, k, nbk, nth, nphi, density, zeta_k,   
      1                      zeta, dzeta, igrid, zeta_gr, u_gr,
      2                      qa,grad,pot,gradtarg,pottarg,hess,
-     3		             hesstarg,source,targ,dipstr,dipvec, 
+     3				 hesstarg,source,targ,dipstr,dipvec, 
      4                      nvort, vort_k, zk_vort, gamma_tot)
 
-ccc	   call CHECK_ERROR(nd, k, nbk, nth, nphi, zeta_gr,
-ccc     1		           igrid, u_gr,
+ccc	    call CHECK_ERROR(nd, k, nbk, nth, nphi, zeta_gr,
+ccc     1			     igrid, u_gr,
 ccc     2                    nvort, vort_k, q_rad, xi_vort)
 
-         if (debug) then
+            if (debug) then
 c
-c if we are testing crowdy's solution, we should also be in here
-            call SOL_TAR_FMM (nd, k, nbk, ntar, density, zeta_k,   
+c if we are testing crowdy`s solution, we should also be in here
+                call SOL_TAR_FMM (nd, k, nbk, ntar, density, zeta_k,   
      1                       zeta, dzeta, xz_tar, yz_tar, u_tar, 
      2                       qa,dipstr, grad, pot,gradtarg,pottarg,hess,
      3			     hesstarg, source,targ,dipvec,nvort, 
      4                       vort_k, zk_vort, gamma_tot)
 c
 c          for a vortex in presence of cap with radius r0, check solution
-c  also need to check solution for crowdy's channel, check_error_tar
-c  will need to add in Crowdy's solution here
-c  Nisha to do
-		if (crowdy) then
+c  also need to check solution for crowdy`s channel, check_error_tar
+c  will need to add in Crowdy`s solution here
 
-		 call CHECK_CROWDY_ERROR_TAR(nd, k, nbk, ntar, 
+		if (crowdy) then
+		    
+		    call CHECK_CROWDY_ERROR_TAR(nd, k, nbk, ntar, 
      1						    xi_vort, q_rad
      2                                  xi_tar, u_tar, vort_k, nvort)
 		else
-            call CHECK_ERROR_TAR (nd, k, nbk, ntar, zeta_k, zeta_tar,  
+                    call CHECK_ERROR_TAR (nd, k, nbk, ntar, zeta_k, zeta_tar,  
      1                            u_tar, nvort, vort_k, zk_vort, r0)
 		end if
 
-       end if
+            end if
          
 	
-	if (make_movie) then
-            call DUMP_MOVIE_ALL (nth, nphi, time, u_gr, it, 37)
-            call DUMP_MOVIE_VORT (nth, nphi, time, zk_vort(1), u_gr, 
+	    if (make_movie) then
+               call DUMP_MOVIE_ALL (nth, nphi, time, u_gr, it, 37)
+               call DUMP_MOVIE_VORT (nth, nphi, time, zk_vort(1), u_gr, 
      1                            it, 37)
-         end if
+            end if
 c
 c Calculate velocity at a point
-         call CALC_VEL (k, nd, nbk, nvort, density, gamma_tot, zeta,  
+            call CALC_VEL (k, nd, nbk, nvort, density, gamma_tot, zeta,  
      1                  dzeta, zeta_k, vort_k, zk_vort, zvel)
-         do ivort = 1, nvort
-            zk_vort(ivort) = zk_vort(ivort) + dt*zvel(ivort)
-         end do
-         call PRIn2 (' zk_vort = *', zk_vort, 2*nvort)
-         if (mod(it,1).eq.0) then
-            call RSCPLOT (zk_vort, nvort, 1, 41)
-         end if
+            do ivort = 1, nvort
+               zk_vort(ivort) = zk_vort(ivort) + dt*zvel(ivort)
+            end do
+            call PRIn2 (' zk_vort = *', zk_vort, 2*nvort)
+            if (mod(it,1).eq.0) then
+               call RSCPLOT (zk_vort, nvort, 1, 41)
+            end if
          end do
          tend = etime(timep)
          call PRIN2 (' TOTAL CPU TIME = *', tend-tbeg, 1)
@@ -396,7 +391,7 @@ c
      2                        x3_vort, zk_vort, vort_k, gamma_tot, 
      3                        zeta_k, dt, ntime)
 c---------------
-c This reads in input data for Crowdy's non-uniform channel example
+c This reads in input data for Crowdy`s non-uniform channel example
 c OUTPUT
 c	k	= 2
 c	nd	= number of points per contour
@@ -411,9 +406,9 @@ c		= sum of vortex strengths
 c	zeta_k	= hole centres in stereographic plane
 c	dt	= 0	
 c	ntime	= 1
-c       xi_vort = location of vortex in xi plane (alpha in Crowdy's paper)
+c       xi_vort = location of vortex in xi plane (alpha in Crowdy`s paper)
 c       zk_vort = location of vortex in stereographic plane
-c       q_rad 	= radius of inner circle in xi plane (q in Crowdy's paper)
+c       q_rad	= radius of inner circle in xi plane (q in Crowdy`s paper)
 c
       implicit real*8 (a-h,o-z)
       dimension cx(2), cy(2), cz(2)
@@ -710,7 +705,7 @@ c	nbk	= total size of system
 c       q_rad	= radius of inner cylinder in conformal plane
 c       xi_vort	= vortex location in conformal plane
 c       zf1, zf2, zf3
-c             	= work arrays for debugging with fft
+c			= work arrays for debugging with fft
 c       wsave	= work array for fft
 c OUTPUT
 c	(xs,ys,zs)	
@@ -1047,7 +1042,7 @@ c********1*********2*********3*********4*********5*********6*********7**
 c
 	subroutine CROWDY_GRID(k, nd, nbk, nth, nphi, q_rad,
      1	    xi_vort, th_k, phi_k,
-     2 	    th_gr, phi_gr, x_gr, y_gr, z_gr, zeta_gr, 
+     2	    th_gr, phi_gr, x_gr, y_gr, z_gr, zeta_gr, 
      3          xzeta_gr, yzeta_gr, xi_gr, xxi_gr, yxi_gr,
      4	    igrid, alph_gr)  
 c
@@ -1071,7 +1066,7 @@ c		= (x,y,z) values at grid points (on sphere)
 c	zeta_gr	= grid point locations in stereographic plane	
 c		= xzeta_gr + i yzeta_gr
 c     xi_gr =       grid point locations in the conformal plane
-c     	=
+c		=
 c     xxi_gr + i yxi_gr
 c
 c	igrid(i,j)	
@@ -1088,7 +1083,7 @@ c	alph_gr	= ignore this - might be used for matlab plotting
      3             th_k(k), phi_k(k), th_gr(nth, nphi),
      4             phi_gr(nth, nphi),
      5             xxi_gr(nth, nphi),
-     6	       yxi_gr(nth, nphi), 
+     6		 yxi_gr(nth, nphi), 
      7		 alph_gr(nth, nphi), pi, radmax,
      8             eps, fac, rad, dalph, theta, drad
 
@@ -1105,7 +1100,7 @@ c grid points are not too close to the boundary
 	eps = fac*2*pi*radmax/nd
 
 	rad = q_rad + eps
-	dalph = 2*pi/nphi 
+	dalph = 2*pi/(nphi-1) 
 	drad  = (radmax-q_rad-2*eps)/nth
 
 c Putting points along circles with radius rad
@@ -1274,7 +1269,7 @@ c conformal plane and returns these target points in the stereographic
 c plane. 
 
 	implicit none
-	integer k, nd, nbk, ntar, i
+	integer k, nd, nbk, ntar, i, itar(1000)
 	real(kind=8) q_rad,th_k(k), phi_k(k),     
      1             xxi_tar(ntar),yxi_tar(ntar), 
      2             xz_tar(ntar),yz_tar(ntar), 
@@ -1292,7 +1287,8 @@ c plane.
 	eps = 2.d0*pi*radmax/nd*fac
 
 	mid_rad = q_rad + (radmax - q_rad - 2*eps)/2
-	dalph = 2*pi/ntar
+	ntar = 100
+	dalph = 2*pi/(ntar-1)
 	theta = 0.d0
 
 
@@ -1305,9 +1301,18 @@ c plane.
      1		xi_vort, zeta_tar(i))
 		xz_tar(i) = dreal(zeta_tar(i))
 		yz_tar(i) = dimag(zeta_tar(i))
+		itar(i) = 1
 	
-	end do 	
-	 
+	end do	
+	
+	
+	open (unit = 301, file = 'xxi_tar.dat')
+        call DUMP (ntar,1 , xxi_tar, itar, 1, 301)
+        open (unit = 302, file = 'yxi_tar.dat')
+        call DUMP (ntar,1, yxi_tar, itar, 1, 302)
+            
+	close(301)
+	close(302)
 	
 	return
 	end subroutine CROWDY_TARGET_POINTS
@@ -1488,7 +1493,7 @@ c---------------
 c
       implicit real*8 (a-h, o-z)
       integer*4 inform(10), ier, iprec, ifcharge, ifpot,
-     1	       ifgrad,ifhess,ifdipole,k,nd,nbk	
+     1		 ifgrad,ifhess,ifdipole,k,nd,nbk	
       complex*16 zeta(nbk), dzeta(nbk), charge(nbk), grad(2,nbk), 
      1           zQsum, zQ2sum, eye, zeta_k(k), zdis, 
      1           pot(nbk), hess(3,nbk),dipstr(nbk)
@@ -1555,13 +1560,13 @@ c Set parameters for FMM call
 	   source(1,i) = x_zeta(i)
 	   source(2,i) = y_zeta(i)
 	   dipvec(1,i) = -dimag(dzeta(i))
-	   dipvec(2,i) = dreal(dzeta(i))  		
+	   dipvec(2,i) = dreal(dzeta(i))		
 	end do
 
 
 	call lfmm2dpartself(ier,iprec,nbk,source,ifcharge, 
      &			charge,ifdipole,dipstr,dipvec,ifpot,
-     &			pot,ifgrad,grad,ifhess,hess) 	
+     &			pot,ifgrad,grad,ifhess,hess)	
          call PRINI (6, 13)
 ccc         call PRIN2 (' qa = *', qa, 2*nnn)
 ccc         call PRIN2 (' cfielf = *', cfield, 2*nnn)
@@ -1908,7 +1913,7 @@ c---------------
       subroutine SOL_GRID_FMM (nd, k, nbk, nth, nphi, u, zeta_k,   
      1                         zeta, dzeta, igrid, zeta_gr, u_gr,
      2                         qa,grad, pot,gradtarg,pottarg,
-     3			        hess,hesstarg,source,targ,dipstr,dipvec,
+     3				  hess,hesstarg,source,targ,dipstr,dipvec,
      4                         nvort, vort_k, zk_vort, gamma_tot)
 c---------------
 c
@@ -1975,7 +1980,7 @@ c         nnn = ij
 cccc         nnn = nbk
 ccc         nnn = nbk+100
 c Set Parameters for FMM
-			  	  
+				  
 	iprec    = 5
 	ifcharge = 0
 	ifdipole = 1
@@ -1991,7 +1996,7 @@ c
      &			qa,ifdipole,dipstr,dipvec,ifpot,
      &			pot,ifgrad,grad,ifhess,hess,ntarg,targ,
      &			ifpottarg,pottarg,ifgradtarg,gradtarg,
-     &			ifhesstarg,hesstarg) 	
+     &			ifhesstarg,hesstarg)	
          call PRINI (6, 13)	
 c         call DAPIF2 (iout, iflag7, nnn, napb, ninire, mex, ierr, 
 c     &                inform, tol, eps7, xat, yat, qa, poten,  
@@ -2067,7 +2072,7 @@ c---------------
       subroutine SOL_TAR_FMM (nd, k, nbk, ntar, u, zeta_k, zeta,  
      1                        dzeta, xz_tar, yz_tar, u_tar, 
      2                        qa,dipstr,grad, pot,gradtarg,pottarg,hess,
-     3			      hesstarg,source,targ,dipvec,nvort, 
+     3				hesstarg,source,targ,dipvec,nvort, 
      4                        vort_k, zk_vort, gamma_tot)
 c---------------
 c
@@ -2136,7 +2141,7 @@ c Set parameters for FMM call
      &			qa,ifdipole,dipstr,dipvec,ifpot,
      &			pot,ifgrad,grad,ifhess,hess,ntar,targ,
      &			ifpottarg,pottarg,ifgradtarg,gradtarg,
-     &			ifhesstarg,hesstarg) 	
+     &			ifhesstarg,hesstarg)	
 
 
 c         call DAPIF2 (iout, iflag7, nnn, napb, ninire, mex, ierr, 
@@ -2164,7 +2169,7 @@ ccc         call PRIN2 (' a_k in sol_GRID_FMM = *', A_k, k)
 		stop
 	   else if(ier.eq.16) then
 		print *, 'ERROR IN FMM: Cannot allocate multipole
-     $  			 expansion workspace 
+     $			 expansion workspace 
      1			in FMM' 
 		stop
          end if
@@ -2315,20 +2320,20 @@ c       or set up grid in the conformal plane.
          do i = 1, nth
             do j = 1, nphi
                if (igrid(i,j).eq.1) then
-               		p1 = 1.d0
-		   	p2 = 1.d0
-		   	p  = 1.d0
+				p1 = 1.d0
+			p2 = 1.d0
+			p  = 1.d0
 			u_ex = 0.d0
-               	    do k = 1, nvort
-		  	call P_SOL(q_rad, xi*(1/xi_vort), p1)
-		  	call P_SOL(q_rad, xi*dconjg(xi_vort), p2)
-		  	p = xi_vort*p1/p2
-		 	u_ex = u_ex - 1/(2*pi)*dlog(cdabs(p))*vort_k(k)
+			    do k = 1, nvort
+			call P_SOL(q_rad, xi*(1/xi_vort), p1)
+			call P_SOL(q_rad, xi*dconjg(xi_vort), p2)
+			p = xi_vort*p1/p2
+			u_ex = u_ex - 1/(2*pi)*dlog(cdabs(p))*vort_k(k)
 			print *, "u exact is:", u_ex
 		    end do
-             		err = max(err,dabs(u_ex-u_gr(i,j)))
-            	call PRIN2 ('### u_ex = *', u_ex, 1)
-              	call PRIN2 ('    u_gr  = *', u_gr(i,j), 1)
+				err = max(err,dabs(u_ex-u_gr(i,j)))
+			call PRIN2 ('### u_ex = *', u_ex, 1)
+			call PRIN2 ('    u_gr  = *', u_gr(i,j), 1)
                end if
             end do
          end do
@@ -2346,17 +2351,17 @@ c---------------
 c---------------
 c
 	real(kind=8) q_rad
-	complex*16 xi, p
+	complex*16 xi, p, q
 	integer N,i
 
 	N = 100
-	p = dcmplx(1.d0,1.d0)
+	q = dcmplx(1.d0,0.d0)
 
 	do i = 1, N
-		p = p*(1-q_rad**(2*i)*xi)*(1 - q_rad**(2*i)*(1/xi))
+		q = q*(1-q_rad**(2*i)*xi)*(1 - q_rad**(2*i)*(1/xi))
 	end do
 
-	p = (1 - xi)*p
+	p = (1 - xi)*q
 
 	return 
 	
@@ -2408,6 +2413,7 @@ c
 c
 c*******1**********2*********3*********4*********5*********6*********7**
 c
+
 	subroutine CHECK_CROWDY_ERROR_TAR(nd, k, nbk, ntar, 
      1					    xi_vort, q_rad,
      2                                  xi_tar, u_tar, vort_k, nvort)
@@ -2416,38 +2422,34 @@ c Exact solution is obtained from Equation 8.20 of
 c Crowdy, Marshall 2005.
 
 	implicit none
-	integer nd, k, nbk, ntar, nvort, N, i
+	integer nd, k, nbk, ntar, nvort, i
 	real(kind=8) u_tar(ntar), vort_k(nvort), 
      1		 pi, dalph, err,
      2             q_rad, u_ex
 	complex*16 eye, xi_vort, xi_tar(ntar),
-     1          p, p1, p2
+     1          p, p1, p2, xi1, xi2
 
 	
 	pi = 4.d0*datan(1.d0)
       eye = dcmplx(0.d0, 1.d0)
       dalph = 2.d0*pi/nd
-
-	N = 100
+	nvort = 1
+		
       err = 0.d0
-      do i= 1, ntar
-               	p1 = 1.d0
-		   	p2 = 1.d0
-		   	p  = 1.d0
-			u_ex = 0.d0
-               	do k = 1, nvort
-		  		call P_SOL(q_rad, xi_tar(i)*(1/xi_vort),
-     1							 p1)
-		  		call P_SOL(q_rad, xi_tar(i)*dconjg(xi_vort),
-     1							 p2)
-		  		p = xi_vort*p1/p2
-		 		u_ex = u_ex - 
-     1				1/(2*pi)*dlog(cdabs(p))*vort_k(k)
-				print *, "u exact is:", u_ex
-		     end do
-             	err = max(err,dabs(u_ex-u_tar(i)))
-            	call PRIN2 ('### u_ex = *', u_ex, 1)
-              	call PRIN2 ('    u_gr  = *', u_tar(i), 1)
+	do i= 1, ntar
+		p1 = 1.d0
+		p2 = 1.d0
+		p  = 1.d0
+		xi1 = xi_tar(i)*(1/xi_vort)
+		xi2 = xi_tar(i)*dconjg(xi_vort)
+		call P_SOL(q_rad, xi1, p1)
+		call P_SOL(q_rad, xi2, p2)
+		p = xi_vort*p1/p2
+		u_ex = -0.5d0/pi*dlog(cdabs(p))*vort_k(1)
+		
+		err = max(err,dabs(u_ex-u_tar(i)))
+		call PRIN2 ('### u_ex = *', u_ex, 1)
+		call PRIN2 ('    u_calculated  = *', u_tar(i), 1)
       end do
          
          call PRIN2 (' max error in solution on grid = *', err, 1)
