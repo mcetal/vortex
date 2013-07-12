@@ -270,6 +270,9 @@ c Calculate velocity at a point
 
 c            call CALC_VEL (k, nd, nbk, nvort, density, gamma_tot, zeta,  
 c     1                  dzeta, zeta_k, vort_k, zk_vort, zvel)
+c
+c vortex locations updated by simple forward Euler
+c something better needs to happen here!
 c            do ivort = 1, nvort
 c               zk_vort(ivort) = zk_vort(ivort) + dt*zvel(ivort)
 c            end do
