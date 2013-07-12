@@ -152,7 +152,7 @@ c Construct boundary geometry on surface of sphere
 c
 c make_channel has not been debugged, in particular, I need to check 
 c derivative info with ffts (mck to do)
-          call MAKE_CHANNEL (k, nd, nbk, q_rad, xi_vort, xs, ys, zs,
+          call MAKE_CHANNEL2 (k, nd, nbk, q_rad, xi_vort, xs, ys, zs,
      1                         zeta, dzeta, x_zeta, y_zeta, diag,
      2                         zf1, zf2, zf3, wsave) 
         
@@ -171,10 +171,9 @@ c
 c Construct grid on surface of sphere
 	if (crowdy) then
 	   call CROWDY_GRID(k, nd, nbk, nth, nphi, q_rad,
-     1	    xi_vort, th_k, phi_k, th_gr, 
-     2           phi_gr, x_gr, y_gr, z_gr, zeta_gr, 
+     1	    xi_vort, x_gr, y_gr, z_gr, zeta_gr, 
      3          xzeta_gr, yzeta_gr, xi_gr, xxi_gr, yxi_gr,
-     4	    igrid, alph_gr) 
+     4	    igrid) 
 	   if (debug) then
 		call CROWDY_TARGET_POINTS (k, nd, nbk, th_k, phi_k, 
      1            q_rad, xi_vort, ntar, xi_tar, xxi_tar, yxi_tar, 
@@ -202,7 +201,8 @@ c Time loop for vortex path
 		print *, "entering time loop"
 	   end if
 		
-         do it = 1, ntime
+ccc         do it = 1, ntime
+         do it = 1, 1
             time = it*dt  
             call PRIN2 (' TIME = *', time, 1)       
 c
@@ -213,7 +213,9 @@ c Construct the RHS and solve
             call PRIN2 (' rhs = *', rhs, nbk)
             call SOLVE (nd, k, kmax, nbk, rhs, density, A_k,  
      1                  gmwork, lrwork, igwork, liwork, maxl)
-            call prin2 (' density = *', density, nbk)
+ccc            call FASMVP (k, nd, nbk, x_zeta, y_zeta, zeta, dzeta,   
+ccc     1                zeta_k, diag, A_k, density, w, qa,   
+ccc     2                grad, pot,hess,source,dipstr,dipvec)
 c
 c Construct solution on surface grid
 ccc         call SOL_GRID (nd, k, nbk, nth, nphi, density, A_k, zeta_k,   
@@ -222,11 +224,11 @@ c            nplot = mod(it,100)
 c            call PRINF (' nplot = *', nplot, 1)
 ccc         if (mod(it,100).eq.0) then
 c
-c            call SOL_GRID_FMM (nd, k, nbk, nth, nphi, density, zeta_k,   
-c     1                      zeta, dzeta, igrid, zeta_gr, u_gr,
-c     2                      qa,grad,pot,gradtarg,pottarg,hess,
-c     3				 hesstarg,source,targ,dipstr,dipvec, 
-c     4                      nvort, vort_k, zk_vort, gamma_tot)
+            call SOL_GRID_FMM (nd, k, nbk, nth, nphi, density, zeta_k,   
+     1                      zeta, dzeta, igrid, zeta_gr, u_gr,
+     2                      qa,grad,pot,gradtarg,pottarg,hess,
+     3				 hesstarg,source,targ,dipstr,dipvec, 
+     4                      nvort, vort_k, zk_vort, gamma_tot, crowdy)
 
 ccc	    call CHECK_ERROR(nd, k, nbk, nth, nphi, zeta_gr,
 ccc     1			     igrid, u_gr,
@@ -248,7 +250,7 @@ c  will need to add in Crowdy`s solution here
 		    if (crowdy) then
 		    
 		 	call CHECK_CROWDY_ERROR_TAR(nd, k, nbk, ntar, 
-     1			xi_vort, q_rad
+     1			xi_vort, q_rad,
      2                  xi_tar, u_tar, vort_k, nvort)
 		    else
               	call CHECK_ERROR_TAR (nd, k, nbk, ntar, zeta_k, zeta_tar,
@@ -736,8 +738,10 @@ c
             call CONF_TO_STEREO(q_rad*xi,xi_vort,zeta(nd+i))
             call DCONF_TO_STEREO(xi, xi_vort, dzeta_dxi1)
             dzeta(i) = eye*xi*dzeta_dxi1
+            dzeta(i) = -dzeta(i)
             call DCONF_TO_STEREO(q_rad*xi, xi_vort, dzeta_dxi2)
             dzeta(nd+i) = -eye*xi*q_rad*dzeta_dxi2
+            dzeta(nd+i) = -dzeta(nd+i)
             call STEREO_TO_SPHERE(zeta(i),xs(i),ys(i),zs(i))
             call STEREO_TO_SPHERE(zeta(nd+i),xs(nd+i),ys(nd+i),zs(nd+i))
 c
@@ -747,6 +751,7 @@ c  calculate curvature/diag on outer contour
             xdot = dreal(dzeta(i))
             ydot = dimag(dzeta(i))
             ds = cdabs(dzeta(i))
+            call prin2 (' ds on outer = *', ds, 1)
             xddot = dreal(d2zeta_dth)
             yddot = dimag(d2zeta_dth)
             rkappa = (xdot*yddot-ydot*xddot)/ds**3
@@ -761,6 +766,7 @@ c  calculate curvature/diag on inner contour
             xdot = dreal(dzeta(nd+i))
             ydot = dimag(dzeta(nd+i))
             ds = cdabs(dzeta(nd+i))
+            call prin2 (' ds on inner = *', ds, 1)
             xddot = dreal(d2zeta_dth)
             yddot = dimag(d2zeta_dth)
             rkappa = (xdot*yddot-ydot*xddot)/ds**3
@@ -769,6 +775,10 @@ c  calculate curvature/diag on inner contour
             zextra = zextra/(2.d0*pi)
             diag(nd+i) = 0.25d0*rkappa*ds/pi - dimag(zextra)            
          end do
+         call prin2 (' zeta(1) = *', zeta(1), 2)
+         call prin2 (' dzeta(1) = *', dzeta(1), 2)
+         call prin2 (' zeta(nd+1) = *', zeta(nd+1), 2)
+         call prin2 (' dzeta(nd+1) = *', dzeta(nd+1), 2)
 c
 c debug using ffts
          call DCFFTI(nd, wsave)
@@ -784,17 +794,17 @@ c debug using ffts
             err2 = 0.d0
             do i = 1, nd
                if (kbod.eq.1) then
-                  error = cdabs(zf2(i) - dzeta(istart+i))
-                  xdot = dreal(zf2(i))
-                  xddot = dreal(zf3(i))
-                  ydot = dimag(zf2(i))
-                  yddot = dimag(zf3(i))
-                 else
+                  error = cdabs(-zf2(i) - dzeta(istart+i))
                   xdot = -dreal(zf2(i))
                   xddot = dreal(zf3(i))
                   ydot = -dimag(zf2(i))
                   yddot = dimag(zf3(i))
-                  error = cdabs(-zf2(i) - dzeta(istart+i))
+                 else
+                  xdot = dreal(zf2(i))
+                  xddot = dreal(zf3(i))
+                  ydot = dimag(zf2(i))
+                  yddot = dimag(zf3(i))
+                  error = cdabs(zf2(i) - dzeta(istart+i))
                end if
                ds = cdabs(zf2(i))
                rkappa = (xdot*yddot-ydot*xddot)/ds**3
@@ -809,6 +819,115 @@ c debug using ffts
             call PRIN2 (' ERROR IN DIAG TERM = *', err2, 1)
             istart = istart + nd
          end do
+c         stop
+            
+c
+c dump out for matlab plotting
+         open (unit = 42, file = 'geo_3d.m')
+         open (unit = 11, file = 'geo_stereo.m')
+         is = 1
+         do kbod = 1, k
+            call RS_3D_PLOT (xs(is),ys(is),zs(is), nd, 1, 42)
+            call RSCPLOT (zeta((kbod-1)*nd+1), nd, 1, 11)
+            is = is + nd
+         end do
+         close(42)
+         close(11)
+c
+      return
+      end      
+c
+c
+c********1*********2*********3*********4*********5*********6*********7**
+c
+      subroutine MAKE_CHANNEL2 (k, nd, nbk, q_rad, xi_vort, xs, ys, zs,
+     1                         zeta, dzeta, x_zeta, y_zeta, diag, 
+     2                         zf1, zf2, zf3, wsave)
+c---------------
+c INPUT
+c	k	= number of contours
+c	nd	= number of points per contour
+c	nbk	= total size of system	
+c       q_rad	= radius of inner cylinder in conformal plane
+c       xi_vort	= vortex location in conformal plane
+c       zf1, zf2, zf3
+c			= work arrays for debugging with fft
+c       wsave	= work array for fft
+c OUTPUT
+c	(xs,ys,zs)	
+c		= coordinates of each point on boundary
+c	zeta = x_zeta + i y_zeta
+c		= boundary points in stereographic plane
+c	dzeta	= derivative of zeta wrt parametrization oriented
+c		  carefully for evaluation of Cauchy integrals
+c	diag	= self-interacting term in integral operator
+c
+      implicit real*8 (a-h,o-z)
+      dimension xs(nbk), ys(nbk), zs(nbk), x_zeta(nbk), y_zeta(nbk),
+     1          diag(nbk), wsave(*)
+      complex*16 eye, xi, xi_vort, zeta(nbk), dzeta(nbk), dzeta_dxi1,
+     1           d2zeta_dxi1, d2zeta_dth, zextra, zf1(nd), zf2(nd), 
+     2           zf3(nd), dzeta_dxi2, d2zeta_dxi2
+c
+         pi = 4.d0*datan(1.d0)
+         eye = dcmplx(0.d0,1.d0)
+         call prin2 (' in make_channel, q_rad = *', q_rad, 1)
+c
+         dalph = 2.d0*pi/nd
+         istart = 0
+         do i = 1, nd
+            xi = cdexp(eye*dalph*(i-1.d0))
+            call CONF_TO_STEREO(xi,xi_vort,zeta(i))
+            x_zeta(i) = dreal(zeta(i))
+            y_zeta(i) = dimag(zeta(i))
+            call CONF_TO_STEREO(q_rad*xi,xi_vort,zeta(nd+i))
+            x_zeta(nd+i) = dreal(zeta(nd+i))
+            y_zeta(nd+i) = dimag(zeta(nd+i))
+            call STEREO_TO_SPHERE(zeta(i),xs(i),ys(i),zs(i))
+            call STEREO_TO_SPHERE(zeta(nd+i),xs(nd+i),ys(nd+i),zs(nd+i))
+         end do
+c
+c debug using ffts
+         call DCFFTI(nd, wsave)
+         istart = 0
+         do kbod = 1, 2
+            call PRINF ('In MAKE_CHANNEL, kbod = *', kbod, 1)
+            do i = 1, nd
+               zf1(i) = zeta(istart+i)
+            end do
+            call FDIFFF(zf1,zf2,nd,wsave)
+            call FDIFFF(zf2,zf3,nd,wsave)
+            do i = 1, nd
+               if (kbod.eq.1) then
+                  xdot = -dreal(zf2(i))
+                  xddot = dreal(zf3(i))
+                  ydot = -dimag(zf2(i))
+                  yddot = dimag(zf3(i))
+                 else
+                  xdot = dreal(zf2(i))
+                  xddot = dreal(zf3(i))
+                  ydot = dimag(zf2(i))
+                  yddot = dimag(zf3(i))
+               end if
+               dzeta(istart+i) = dcmplx(xdot,ydot)
+               ds = cdabs(dzeta(istart+i))
+               rkappa = (xdot*yddot-ydot*xddot)/ds**3
+               zextra = dzeta(istart+i)*dconjg(zeta(istart+i))
+     1                  /(1.d0+cdabs(zeta(istart+i))**2)
+               zextra = zextra/(2.d0*pi)
+               if (kbod.eq.1) then 
+                  diag(istart+i) = 0.25d0*rkappa*ds/pi - dimag(zextra)
+                 else            
+                  diag(istart+i) = 0.25d0*rkappa*ds/pi - dimag(zextra) 
+               end if   
+            end do
+            istart = istart + nd
+         end do
+         call prin2 (' zeta(1) = *', zeta(1), 2)
+         call prin2 (' dzeta(1) = *', dzeta(1), 2)
+         call prin2 (' zeta(nd+1) = *', zeta(nd+1), 2)
+         call prin2 (' dzeta(nd+1) = *', dzeta(nd+1), 2)
+         call prin2 (' diag = *', diag, nbk)
 c         stop
             
 c
@@ -1042,10 +1161,9 @@ c
 c********1*********2*********3*********4*********5*********6*********7**
 c
 	subroutine CROWDY_GRID(k, nd, nbk, nth, nphi, q_rad,
-     1	    xi_vort, th_k, phi_k,
-     2	    th_gr, phi_gr, x_gr, y_gr, z_gr, zeta_gr, 
+     1	    xi_vort, x_gr, y_gr, z_gr, zeta_gr, 
      3          xzeta_gr, yzeta_gr, xi_gr, xxi_gr, yxi_gr,
-     4	    igrid, alph_gr)  
+     4	    igrid)  
 c
 c-------------------
 c Constructs grid points on surface of sphere for plotting solution
@@ -1081,11 +1199,8 @@ c	alph_gr	= ignore this - might be used for matlab plotting
 	real(kind=8) q_rad, x_gr(nth, nphi),
      1             y_gr(nth, nphi), z_gr(nth, nphi), 
      2             xzeta_gr(nth, nphi), yzeta_gr(nth, nphi),
-     3             th_k(k), phi_k(k), th_gr(nth, nphi),
-     4             phi_gr(nth, nphi),
      5             xxi_gr(nth, nphi),
-     6		 yxi_gr(nth, nphi), 
-     7		 alph_gr(nth, nphi), pi, radmax,
+     6		 yxi_gr(nth, nphi), pi, radmax,
      8             eps, fac, rad, dalph, theta, drad
 
 	complex*16 xi_vort, zeta_gr(nth, nphi),
@@ -1099,10 +1214,10 @@ c grid points are not too close to the boundary
 	radmax = 1.d0
 	fac = 2.d0
 	eps = fac*2*pi*radmax/nd
-
+        call prin2 (' in CROWDY_GRID, xi_vort = *', xi_vort, 2)
 	rad = q_rad + eps
-	dalph = 2*pi/(nphi-1) 
-	drad  = (radmax-q_rad-2*eps)/nth
+	dalph = 2.d0*pi/nphi 
+	drad  = (radmax-q_rad-2.d0*eps)/nth
 
 c Putting points along circles with radius rad
 	
@@ -1139,15 +1254,15 @@ c dump out for matlab plotting
 	   open (unit = 171, file = 'xxi_grid.dat')
 	   open (unit = 181, file = 'yxi_grid.dat')
 	   open (unit = 191, file = 'xi_grid.dat')
-            call DUMP (nth, nphi, x_gr, igrid, 0, 111)
-            call DUMP (nth, nphi, x_gr, igrid, 1, 121)
-            call DUMP (nth, nphi, y_gr, igrid, 1, 131)
-            call DUMP (nth, nphi, z_gr, igrid, 1, 141)
-            call DUMP (nth, nphi, xzeta_gr, igrid, 1, 151)
-            call DUMP (nth, nphi, yzeta_gr, igrid, 1, 161)
-		call DUMP (nth, nphi, xxi_gr,   igrid, 1, 171)
-            call DUMP (nth, nphi, yxi_gr,   igrid, 1, 181)
-		call DUMP (nth, nphi, xi_gr,    igrid, 1, 191)
+            call DUMP_CROWDY (nth, nphi, x_gr, igrid, 0, 111)
+            call DUMP_CROWDY (nth, nphi, x_gr, igrid, 1, 121)
+            call DUMP_CROWDY (nth, nphi, y_gr, igrid, 1, 131)
+            call DUMP_CROWDY (nth, nphi, z_gr, igrid, 1, 141)
+            call DUMP_CROWDY (nth, nphi, xzeta_gr, igrid, 1, 151)
+            call DUMP_CROWDY (nth, nphi, yzeta_gr, igrid, 1, 161)
+		call DUMP_CROWDY (nth, nphi, xxi_gr,   igrid, 1, 171)
+            call DUMP_CROWDY (nth, nphi, yxi_gr,   igrid, 1, 181)
+		call DUMP_CROWDY (nth, nphi, xi_gr,    igrid, 1, 191)
          close(111)
          close(121)
          close(131)
@@ -1289,7 +1404,7 @@ c plane.
 
 	mid_rad = q_rad + (radmax - q_rad - 2*eps)/2
 	ntar = 100
-	dalph = 2*pi/(ntar-1)
+	dalph = 2*pi/ntar
 	theta = 0.d0
 
 
@@ -1369,6 +1484,7 @@ c
             xddot = dreal(d2zeta)
             yddot = dimag(d2zeta)
             rkappa = (xdot*yddot-ydot*xddot)/ds**3
+            call prin2 (' rkappa = *', rkappa, 1)
             zextra = dzeta(i)*dconjg(zeta(i))/(1.d0+cdabs(zeta(i))**2)
             zextra = zextra/(2.d0*pi)
             diag(i) = 0.25d0*rkappa*ds/pi - dimag(zextra)
@@ -1377,6 +1493,10 @@ c
             zk_vort(ivort) = (x1_vort(ivort) + eye*x2_vort(ivort))/
      1                       (1.d0 - x3_vort(ivort))
          end do
+         call prin2 (' zeta(1) = *', zeta(1),2)
+         call prin2 (' dzeta(1) = *', dzeta(1), 2)
+         call prin2 (' zeta(nd+1) = *', zeta(nd+1), 2)
+         call prin2 (' dzeta(nd+1) = *', dzeta(nd+1), 2)
 c
 c dump out for matlab plotting
          open (unit = 11, file = 'geo_stereo.m')
@@ -1463,9 +1583,10 @@ c
          eye = dcmplx(0.d0,1.d0)
 c
          A = -gamma_tot
-ccc         call PRIN2 (' in GETRHS, zk_vort = *', zk_vort, 2*k)
-ccc         call PRIN2 ('            vort_k = *', vort_k, k)
-ccc         call PRIN2 ('            gamma_tot = *', gamma_tot, 1)
+         call PRIN2 (' in GETRHS, zk_vort = *', zk_vort, 2*nvort)
+         call PRIN2 ('            vort_k = *', vort_k, nvort)
+         call PRIN2 ('            zeta_k = *', zeta_k, 2*k)
+         call PRIN2 ('            gamma_tot = *', gamma_tot, 1)
          istart = 0
          do kbod = 1, k
             do j = 1, nd
@@ -1564,7 +1685,7 @@ c Set parameters for FMM call
 	   dipvec(2,i) = dreal(dzeta(i))		
 	end do
 
-
+        call PRINI (0,0)
 	call lfmm2dpartself(ier,iprec,nbk,source,ifcharge, 
      &			charge,ifdipole,dipstr,dipvec,ifpot,
      &			pot,ifgrad,grad,ifhess,hess)	
@@ -1915,7 +2036,8 @@ c---------------
      1                         zeta, dzeta, igrid, zeta_gr, u_gr,
      2                         qa,grad, pot,gradtarg,pottarg,
      3				  hess,hesstarg,source,targ,dipstr,dipvec,
-     4                         nvort, vort_k, zk_vort, gamma_tot)
+     4                         nvort, vort_k, zk_vort, gamma_tot, 
+     5                         crowdy)
 c---------------
 c
       implicit real*8 (a-h,o-z)
@@ -1929,6 +2051,7 @@ c
       integer*4 iout(2), inform(10), ier,iprec,ifcharge,
      1		ifpot,ifgrad,ifhess,ifdipole,ifpottarg,
      2		ifgradtarg,ifhesstarg,ntarg
+      logical crowdy
       REAL*4 TIMEP(2), ETIME
 c
          pi = 4.d0*datan(1.d0)
@@ -1936,8 +2059,8 @@ c
          dalph = 2.d0*pi/nd
          A = -gamma_tot
 c
-         call prin2 (' in sol_grid_fmm, vort_k = *', vort_k, k)
-         call prin2 ('                  zk_vort = *',zk_vort, 2*k)
+         call prin2 (' in sol_grid_fmm, vort_k = *', vort_k, nvort)
+         call prin2 ('                  zk_vort = *',zk_vort, 2*nvort)
          call prin2 ('                  gamma_tot = *', gamma_tot, 1)
          call prin2 ('                 zeta_k = *', zeta_k, 2*k)
 c
@@ -2054,6 +2177,7 @@ ccc                  u_gr(i,j) = psi_vort + A*circ
                end if
             end do
          end do
+ccc         call prin2 (' u from fmm = *', pottarg, 2*ntarg)
          call PRIN2 (' Max solution = *', umax, 1)
          call PRIN2 (' Min solution = *', umin, 1)
 c
@@ -2062,7 +2186,11 @@ ccc         call PRIN2 (' poten = *', poten, n)
          call PRIN2 (' TIME FOR FMM  ON GRID = *',tend-tbeg,1)
 ccc         call PRIN2 (' cfield = *', cfield, 2*n)
          open (unit = 43, file = 'ugrid.dat')
+         if (crowdy) then
+            call DUMP_CROWDY (nth, nphi, u_gr, igrid, 1, 43)
+           else
             call DUMP (nth, nphi, u_gr, igrid, 1, 43)
+         end if
             close(43)
 c
       return
@@ -2137,14 +2265,14 @@ c Set parameters for FMM call
 	ifgradtarg = 0
 	ifhesstarg = 0
 
-
+        call PRINI (0,0)
 	call lfmm2dparttarg(ier,iprec,nbk,source,ifcharge, 
      &			qa,ifdipole,dipstr,dipvec,ifpot,
      &			pot,ifgrad,grad,ifhess,hess,ntar,targ,
      &			ifpottarg,pottarg,ifgradtarg,gradtarg,
      &			ifhesstarg,hesstarg)	
 
-
+         call PRINI (6,13)
 c         call DAPIF2 (iout, iflag7, nnn, napb, ninire, mex, ierr, 
 c     &                inform, tol, eps7, xat, yat, qa, poten,  
 c     &                cfield, wksp, nsp, CLOSE)
@@ -2188,7 +2316,7 @@ c Fix up field
             end do
             u_tar(i) = u_tar(i) + psi_vort + A*circ
          end do
-ccc         call prin2 (' u_tar = *', u_tar, ntar)
+         call prin2 (' u_tar = *', u_tar, ntar)
 c
          tend = etime(timep)
 ccc         call PRIN2 (' poten = *', poten, n)
@@ -2359,10 +2487,10 @@ c
 	q = dcmplx(1.d0,0.d0)
 
 	do i = 1, N
-		q = q*(1-q_rad**(2*i)*xi)*(1 - q_rad**(2*i)*(1/xi))
+		q = q*(1.d0-q_rad**(2*i)*xi)*(1.d0 - q_rad**(2*i)/xi)
 	end do
 
-	p = (1 - xi)*q
+	p = (1.d0 - xi)*q
 
 	return 
 	
@@ -2438,15 +2566,12 @@ c Crowdy, Marshall 2005.
 		
       err = 0.d0
 	do i= 1, ntar
-		p1 = 1.d0
-		p2 = 1.d0
-		p  = 1.d0
-		xi1 = xi_tar(i)*(1/xi_vort)
+		xi1 = xi_tar(i)*(1.d0/xi_vort)
 		xi2 = xi_tar(i)*dconjg(xi_vort)
 		call P_SOL(q_rad, xi1, p1)
 		call P_SOL(q_rad, xi2, p2)
 		p = xi_vort*p1/p2
-		u_ex = -0.5d0/pi*dlog(cdabs(p))*vort_k(1)
+		u_ex = -(0.5d0/pi)*dlog(cdabs(p))*vort_k(1)
 		
 		err = max(err,dabs(u_ex-u_tar(i)))
 		call PRIN2 ('### u_ex = *', u_ex, 1)
@@ -2569,6 +2694,34 @@ c periodic
                   write (if,'(a)')  ''
                end if
             end do
+c
+      return
+      end
+c
+c*********************
+c
+      subroutine DUMP_CROWDY (nx,ny,ugrid,igrid,ireal,if)
+      implicit real*8 (a-h,o-z)
+      dimension ugrid(nx,ny), igrid(nx,ny)
+c
+         DO i = 1,NX
+            do j = 1, NY
+               if (ireal.eq.1) then 
+                  write(if,'(e20.13,$)')(ugrid(I,J))
+                  write (if,'(a)')  ''
+                 else
+                  write(if,'(i4,$)') (igrid(i,j))
+                  write (if,'(a)')  ''
+               end if
+            end do
+               if (ireal.eq.1) then 
+                  write(if,'(e20.13,$)')(ugrid(I,1))
+                  write (if,'(a)')  ''
+                 else
+                  write(if,'(i4,$)') (igrid(i,1))
+                  write (if,'(a)')  ''
+               end if
+         ENDDO
 c
       return
       end
