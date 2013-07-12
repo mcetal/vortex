@@ -133,7 +133,7 @@ c
 c set debug = .true. if running the spherical cap case
 c set crowdy = .true. if running the non-uniform channel case
          crowdy = .true.
-         debug = .true.
+         debug =  .true.
 
 c Read hole geometry data
          if (crowdy) then  
@@ -218,15 +218,15 @@ c
 c Construct solution on surface grid
 ccc         call SOL_GRID (nd, k, nbk, nth, nphi, density, A_k, zeta_k,   
 ccc     1                  zeta, dzeta, igrid, zeta_gr, u_gr)
-            nplot = mod(it,100)
-            call PRINF (' nplot = *', nplot, 1)
+c            nplot = mod(it,100)
+c            call PRINF (' nplot = *', nplot, 1)
 ccc         if (mod(it,100).eq.0) then
 c
-            call SOL_GRID_FMM (nd, k, nbk, nth, nphi, density, zeta_k,   
-     1                      zeta, dzeta, igrid, zeta_gr, u_gr,
-     2                      qa,grad,pot,gradtarg,pottarg,hess,
-     3				 hesstarg,source,targ,dipstr,dipvec, 
-     4                      nvort, vort_k, zk_vort, gamma_tot)
+c            call SOL_GRID_FMM (nd, k, nbk, nth, nphi, density, zeta_k,   
+c     1                      zeta, dzeta, igrid, zeta_gr, u_gr,
+c     2                      qa,grad,pot,gradtarg,pottarg,hess,
+c     3				 hesstarg,source,targ,dipstr,dipvec, 
+c     4                      nvort, vort_k, zk_vort, gamma_tot)
 
 ccc	    call CHECK_ERROR(nd, k, nbk, nth, nphi, zeta_gr,
 ccc     1			     igrid, u_gr,
@@ -245,15 +245,15 @@ c          for a vortex in presence of cap with radius r0, check solution
 c  also need to check solution for crowdy`s channel, check_error_tar
 c  will need to add in Crowdy`s solution here
 
-		if (crowdy) then
+		    if (crowdy) then
 		    
-		    call CHECK_CROWDY_ERROR_TAR(nd, k, nbk, ntar, 
-     1						    xi_vort, q_rad
-     2                                  xi_tar, u_tar, vort_k, nvort)
-		else
-                    call CHECK_ERROR_TAR (nd, k, nbk, ntar, zeta_k, zeta_tar,  
+		 	call CHECK_CROWDY_ERROR_TAR(nd, k, nbk, ntar, 
+     1			xi_vort, q_rad
+     2                  xi_tar, u_tar, vort_k, nvort)
+		    else
+              	call CHECK_ERROR_TAR (nd, k, nbk, ntar, zeta_k, zeta_tar,
      1                            u_tar, nvort, vort_k, zk_vort, r0)
-		end if
+		    end if
 
             end if
          
@@ -265,15 +265,16 @@ c  will need to add in Crowdy`s solution here
             end if
 c
 c Calculate velocity at a point
-            call CALC_VEL (k, nd, nbk, nvort, density, gamma_tot, zeta,  
-     1                  dzeta, zeta_k, vort_k, zk_vort, zvel)
-            do ivort = 1, nvort
-               zk_vort(ivort) = zk_vort(ivort) + dt*zvel(ivort)
-            end do
-            call PRIn2 (' zk_vort = *', zk_vort, 2*nvort)
-            if (mod(it,1).eq.0) then
-               call RSCPLOT (zk_vort, nvort, 1, 41)
-            end if
+
+c            call CALC_VEL (k, nd, nbk, nvort, density, gamma_tot, zeta,  
+c     1                  dzeta, zeta_k, vort_k, zk_vort, zvel)
+c            do ivort = 1, nvort
+c               zk_vort(ivort) = zk_vort(ivort) + dt*zvel(ivort)
+c            end do
+c            call PRIn2 (' zk_vort = *', zk_vort, 2*nvort)
+c            if (mod(it,1).eq.0) then
+c               call RSCPLOT (zk_vort, nvort, 1, 41)
+c            end if
          end do
          tend = etime(timep)
          call PRIN2 (' TOTAL CPU TIME = *', tend-tbeg, 1)
@@ -2415,8 +2416,8 @@ c*******1**********2*********3*********4*********5*********6*********7**
 c
 
 	subroutine CHECK_CROWDY_ERROR_TAR(nd, k, nbk, ntar, 
-     1					    xi_vort, q_rad,
-     2                                  xi_tar, u_tar, vort_k, nvort)
+     1				 xi_vort, q_rad,
+     2                         xi_tar, u_tar, vort_k, nvort)
 
 c Exact solution is obtained from Equation 8.20 of 
 c Crowdy, Marshall 2005.
