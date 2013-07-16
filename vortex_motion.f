@@ -130,10 +130,10 @@ c if making a movie (this is not debugged right now!)
             open (unit = 37, file = 'movie/u_movie.m')
          end if
 c
-c set debug = .true. if running the spherical cap case
+c set crowdy = .false. if running the spherical cap case
 c set crowdy = .true. if running the non-uniform channel case
          crowdy = .true.
-         debug =  .true.
+         debug =  .false.
 
 c Read hole geometry data
          if (crowdy) then  
@@ -150,8 +150,6 @@ c
 c Construct boundary geometry on surface of sphere
          if (crowdy) then
 c
-c make_channel has not been debugged, in particular, I need to check 
-c derivative info with ffts (mck to do)
           call MAKE_CHANNEL2 (k, nd, nbk, q_rad, xi_vort, xs, ys, zs,
      1                         zeta, dzeta, x_zeta, y_zeta, diag,
      2                         zf1, zf2, zf3, wsave) 
@@ -201,22 +199,27 @@ c Time loop for vortex path
 		print *, "entering time loop"
 	   end if
 		
-ccc         do it = 1, ntime
-         do it = 1, 1
-            time = it*dt  
+         do it = 1, ntime
+            time = it*dt 
+		print *, "*********************" 
             call PRIN2 (' TIME = *', time, 1)       
 c
 c Construct the RHS and solve
             call PRINI (6,13)
             call GETRHS (k, nd, nbk, zeta_k, zeta, rhs, nvort, vort_k, 
      1                   zk_vort, gamma_tot)
-            call PRIN2 (' rhs = *', rhs, nbk)
+		if(debug) then
+           call PRIN2 (' rhs = *', rhs, nbk)
+		end if
             call SOLVE (nd, k, kmax, nbk, rhs, density, A_k,  
      1                  gmwork, lrwork, igwork, liwork, maxl)
-ccc            call FASMVP (k, nd, nbk, x_zeta, y_zeta, zeta, dzeta,   
-ccc     1                zeta_k, diag, A_k, density, w, qa,   
-ccc     2                grad, pot,hess,source,dipstr,dipvec)
-c
+		if(debug) then
+c directly calling fasmvp 
+            call FASMVP (k, nd, nbk, x_zeta, y_zeta, zeta, dzeta,   
+     1                zeta_k, diag, A_k, density, w, qa,   
+     2                grad, pot,hess,source,dipstr,dipvec)
+		end if
+
 c Construct solution on surface grid
 ccc         call SOL_GRID (nd, k, nbk, nth, nphi, density, A_k, zeta_k,   
 ccc     1                  zeta, dzeta, igrid, zeta_gr, u_gr)
@@ -276,7 +279,9 @@ c something better needs to happen here!
 c            do ivort = 1, nvort
 c               zk_vort(ivort) = zk_vort(ivort) + dt*zvel(ivort)
 c            end do
-c            call PRIn2 (' zk_vort = *', zk_vort, 2*nvort)
+		 if(debug) then
+            call PRIn2 (' zk_vort = *', zk_vort, 2*nvort)
+		 end if
 c            if (mod(it,1).eq.0) then
 c               call RSCPLOT (zk_vort, nvort, 1, 41)
 c            end if
@@ -428,17 +433,18 @@ c
 c
          read (12,*) nd
          k = 2
-         dt = 0.d0
-         ntime = 1
          nbk = k*nd
          call PRINF (' nbk = *', nbk, 1)
          read (12,*) nth, nphi
+	 read (12,*) dt, ntime
          read (12,*) q_rad
          read (12,*) vort_k(1), vort_re, vort_im
          xi_vort = dcmplx(vort_re, vort_im)
          nvort = 1
          gamma_tot = vort_k(1)
          close(12)
+
+	 call PRINF("Number of time steps is: *", ntime, 1)
 c
 c initialize plotting outputs (6 is to screen, 13 is to fort.13)
          call PRINI (6,13) 
@@ -926,11 +932,11 @@ c debug using ffts
             end do
             istart = istart + nd
          end do
-         call prin2 (' zeta(1) = *', zeta(1), 2)
-         call prin2 (' dzeta(1) = *', dzeta(1), 2)
-         call prin2 (' zeta(nd+1) = *', zeta(nd+1), 2)
-         call prin2 (' dzeta(nd+1) = *', dzeta(nd+1), 2)
-         call prin2 (' diag = *', diag, nbk)
+c         call prin2 (' zeta(1) = *', zeta(1), 2)
+c         call prin2 (' dzeta(1) = *', dzeta(1), 2)
+c         call prin2 (' zeta(nd+1) = *', zeta(nd+1), 2)
+c         call prin2 (' dzeta(nd+1) = *', dzeta(nd+1), 2)
+c         call prin2 (' diag = *', diag, nbk)
 c         stop
             
 c
@@ -1082,7 +1088,7 @@ c
 c
 c Calculate epsilon, which determines a buffer zone between boundary
 c and grid points considered in the domain (i.e. it ensures target 
-c points don't get too close to boundary where quadrature breaks down)
+c points don`t get too close to boundary where quadrature breaks down)
          radmax = 0.d0
          do kbod = 1, k
             radmax = max(radmax, dabs(ak(kbod)))
@@ -1519,7 +1525,7 @@ c********1*********2*********3*********4*********5*********6*********7**
 c
       subroutine POINT_VORTEX (zeta, zeta_k, psi)
 c---------------
-c  evaluates G(zeta,zeta_k) from paper (i.e. Green's function in 
+c  evaluates G(zeta,zeta_k) from paper (i.e. Green`s function in 
 c  complex plane)
 c
       implicit real*8 (a-h,o-z) 
@@ -1582,14 +1588,19 @@ c
       implicit real*8 (a-h,o-z)
       dimension rhs(nbk), vort_k(nvort)
       complex*16 zeta_k(k), eye, zeta(nbk), zk_vort(nvort)
+	logical debug
+	
 c
          eye = dcmplx(0.d0,1.d0)
+	   debug = .false.
 c
          A = -gamma_tot
+	   if(debug) then
          call PRIN2 (' in GETRHS, zk_vort = *', zk_vort, 2*nvort)
          call PRIN2 ('            vort_k = *', vort_k, nvort)
          call PRIN2 ('            zeta_k = *', zeta_k, 2*k)
          call PRIN2 ('            gamma_tot = *', gamma_tot, 1)
+	   end if
          istart = 0
          do kbod = 1, k
             do j = 1, nd
@@ -1626,7 +1637,9 @@ c
      1          y_zeta(nbk), diag(nbk), A_k(k),
      1          source(2,nbk),dipvec(2,nbk)
       REAL*4 TIMEP(2), ETIME
+	logical debug
 c
+	   debug =.false.
          pi = 4.D0*DATAN(1.D0)
          eye = DCMPLX(0.D0,1.D0)
          dalph = 2.d0*pi/nd
@@ -1656,22 +1669,9 @@ c
      1                   /(1.d0+cdabs(zeta(i))**2)
             zQsum = zQsum - dreal(zQ2sum/(2.d0*pi*eye))
          end do
-ccc         call PRIn2 (' zQsum = *', zQsum, 2)
-c
-c         tbeg = etime(timep)
-c         iout(1) = 0
-c         iout(2) = 13
-c         iflag7 = 3
-c         napb = 20
-c         ninire = 2
-c         mex = 300
-c         eps7 = 1.d-14
-c         tol = 1.d-14
-c         nnn = nbk
-c         call DAPIF2 (iout, iflag7, nnn, napb, ninire, mex, ierr, 
-c     &                inform, tol, eps7, x_zeta, y_zeta, qa, poten,  
-c     &                cfield, wksp, nsp, CLOSE)
-
+	   if(debug) then
+         call PRIn2 (' zQsum = *', zQsum, 2)
+	   end if
 	
 c Set parameters for FMM call
 	iprec    = 5
@@ -1712,9 +1712,7 @@ c         end if
 		stop
          end if
 
-ccc         call PRINF (' Number of Levels used = *', inform(3), 1)
-ccc         call PRIN2 (' cfield = *', cfield, 2*nbk)
-c
+ccc
 c Fix up field
          istart = 0
          do kbod = 1, k
@@ -1826,7 +1824,10 @@ c  Timings
 c
       real*4 timep(2), etime
 c
-         pi = 4.d0*datan(1.d0)
+	logical debug
+	
+	debug=.false.
+	pi = 4.d0*datan(1.d0)
 c
 c  solve linear system using GMRES.
 c
@@ -1861,9 +1862,11 @@ c
      1               ierr, 0, sb, sx, rwork, lrwork, iwork, 
      1               liwork, rw, iw)
          call Prin2 (' after laplace solve, err = *', err, 1)
+	   if(debug) then
          call PrinF (' after laplace solve, ierr = *', ierr, 1)
          call PRINI (6,13)
          call PRINF ('  # GMRES ITERATIONS = *',iter,1)
+	   end if
          if (ierr.gt.2) then
             call PRINF ('  SOMETHING WRONG IN GMRES, IERR = *',ierr,1)
             call PRINF ('  iwork = *',iwork,10)
@@ -1886,7 +1889,9 @@ c  calculate A_k
                A_k(kbod) = A_k(kbod)*dth
                istart = istart+nd
             end do
+		if(debug) then
             call PRIN2 (' A_k = *', A_k, k)
+		end if
          end if
 c
       return
@@ -2054,7 +2059,7 @@ c
       integer*4 iout(2), inform(10), ier,iprec,ifcharge,
      1		ifpot,ifgrad,ifhess,ifdipole,ifpottarg,
      2		ifgradtarg,ifhesstarg,ntarg
-      logical crowdy
+      logical crowdy, debug
       REAL*4 TIMEP(2), ETIME
 c
          pi = 4.d0*datan(1.d0)
@@ -2062,10 +2067,14 @@ c
          dalph = 2.d0*pi/nd
          A = -gamma_tot
 c
+	 debug = .false.
+
+	 if(debug) then
          call prin2 (' in sol_grid_fmm, vort_k = *', vort_k, nvort)
          call prin2 ('                  zk_vort = *',zk_vort, 2*nvort)
          call prin2 ('                  gamma_tot = *', gamma_tot, 1)
          call prin2 ('                 zeta_k = *', zeta_k, 2*k)
+	 end if
 c
 c pack zeta and zeta_gr into x_zeta and y_zeta
          zQsum = 0.d0
@@ -2091,8 +2100,10 @@ c pack zeta and zeta_gr into x_zeta and y_zeta
                end if
             end do
          end do
+	 if(debug) then
          call PRINF (' ij = *', ij, 1)
-ccc         call PRIn2 (' zQsum = *', zQsum, 2)
+         call PRIn2 (' zQsum = *', zQsum, 2)
+	 end if
 c
 c         tbeg = etime(timep)
 c         iout(1) = 0
@@ -2125,21 +2136,6 @@ c
      &			ifpottarg,pottarg,ifgradtarg,gradtarg,
      &			ifhesstarg,hesstarg)	
          call PRINI (6, 13)	
-c         call DAPIF2 (iout, iflag7, nnn, napb, ninire, mex, ierr, 
-c     &                inform, tol, eps7, xat, yat, qa, poten,  
-c     &                cfield, wksp, nsp, CLOSE)
-c         call PRINI (6, 13)
-ccc         call PRIN2 (' cfield = *', cfield, 2*nnn)
-c         call PRINF (' Number of Levels = *', inform(3), 1)
-c         if (ierr(1).ne.0) then
-c            write (6,*) '  ERROR IN DAPIF2, IERR = ', (ierr(ii),ii=1,6)
-c           write(6,*) '  INFORM = ', (inform(ii),ii=1,6)
-c            stop
-c         end if
-ccc         call PRINF (' Number of Levels used = *', inform(3), 1)
-ccc         call PRIN2 (' cfield = *', cfield, 2*nbk)
-c
-
 	if (ier.eq.4) then
             print *, 'ERROR IN FMM: Cannot allocate tree workspace'
             stop
@@ -2180,14 +2176,18 @@ ccc                  u_gr(i,j) = psi_vort + A*circ
                end if
             end do
          end do
-ccc         call prin2 (' u from fmm = *', pottarg, 2*ntarg)
+	 if(debug) then
+         call prin2 (' u from fmm = *', pottarg, 2*ntarg)
+	 end if
          call PRIN2 (' Max solution = *', umax, 1)
          call PRIN2 (' Min solution = *', umin, 1)
 c
          tend = etime(timep)
-ccc         call PRIN2 (' poten = *', poten, n)
+	 if(debug) then
+         call PRIN2 (' poten = *', poten, n)
+	 end if
          call PRIN2 (' TIME FOR FMM  ON GRID = *',tend-tbeg,1)
-ccc         call PRIN2 (' cfield = *', cfield, 2*n)
+
          open (unit = 43, file = 'ugrid.dat')
          if (crowdy) then
             call DUMP_CROWDY (nth, nphi, u_gr, igrid, 1, 43)
@@ -2219,7 +2219,10 @@ c
       integer*4 ier,iprec,ifcharge,ifdipole,ifpot,ifgrad,ifhess,
      1          ifpottarg,ifgradtarg,ifhesstarg
       REAL*4 TIMEP(2), ETIME
+      logical debug
+
 c
+	 debug=.false.
          pi = 4.d0*datan(1.d0)
          eye = dcmplx(0.d0, 1.d0)
          dalph = 2.d0*pi/nd
@@ -2276,22 +2279,9 @@ c Set parameters for FMM call
      &			ifhesstarg,hesstarg)	
 
          call PRINI (6,13)
-c         call DAPIF2 (iout, iflag7, nnn, napb, ninire, mex, ierr, 
-c     &                inform, tol, eps7, xat, yat, qa, poten,  
-c     &                cfield, wksp, nsp, CLOSE)
-c         call PRINI (6, 13)
-ccc         call PRIN2 (' cfield = *', cfield, 2*nnn)
-c         call PRINF (' Number of Levels = *', inform(3), 1)
-c         if (ierr(1).ne.0) then
-c            write (6,*) '  ERROR IN DAPIF2, IERR = ', (ierr(ii),ii=1,6)
-c            write(6,*) '  INFORM = ', (inform(ii),ii=1,6)
-c            stop
-c         end if
-ccc         call PRINF (' Number of Levels used = *', inform(3), 1)
-ccc         call PRIN2 (' cfield = *', cfield, 2*nbk)
-c
-ccc         call PRIN2 (' a_k in sol_GRID_FMM = *', A_k, k)
-
+	 if(debug) then
+         call PRIN2 (' a_k in sol_GRID_FMM = *', A_k, k)
+	 end if
 	if (ier.eq.4) then
             print *, 'ERROR IN FMM: Cannot allocate tree workspace'
             stop
@@ -2319,12 +2309,13 @@ c Fix up field
             end do
             u_tar(i) = u_tar(i) + psi_vort + A*circ
          end do
-         call prin2 (' u_tar = *', u_tar, ntar)
+c         call prin2 (' u_tar = *', u_tar, ntar)
 c
          tend = etime(timep)
-ccc         call PRIN2 (' poten = *', poten, n)
+	   if(debug) then
+         call PRIN2 (' poten = *', poten, n)
          call PRIN2 (' TIME FOR FMM  ON GRID = *',tend-tbeg,1)
-ccc         call PRIN2 (' cfield = *', cfield, 2*n)
+         end if
 c
       return
       end
@@ -2531,8 +2522,8 @@ ccc         zeta_k(1) = dcmplx(-10.d0,-10.d0)
             u_ex = -vort_k(1)*dlog(arg)/(2.d0*pi)
             err = max(err,dabs(u_ex-u_tar(i)))
             umax = max(umax,u_ex)
-            call PRIN2 ('### u_ex = *', u_ex, 1)
-            call PRIN2 ('    u_tar  = *', u_tar(i), 1)
+c            call PRIN2 ('### u_ex = *', u_ex, 1)
+c            call PRIN2 ('    u_tar  = *', u_tar(i), 1)
          end do
          call PRIN2 (' max abs error in solution = *', err, 1)
          call PRIN2 (' max rel error in solution = *', err/umax, 1)
@@ -2577,8 +2568,8 @@ c Crowdy, Marshall 2005.
 		u_ex = -(0.5d0/pi)*dlog(cdabs(p))*vort_k(1)
 		
 		err = max(err,dabs(u_ex-u_tar(i)))
-		call PRIN2 ('### u_ex = *', u_ex, 1)
-		call PRIN2 ('    u_calculated  = *', u_tar(i), 1)
+c		call PRIN2 ('### u_ex = *', u_ex, 1)
+c		call PRIN2 ('    u_calculated  = *', u_tar(i), 1)
       end do
          
          call PRIN2 (' max error in solution on grid = *', err, 1)

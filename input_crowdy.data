@@ -1,9 +1,11 @@
 2048
 1000 1000
+0.001 1000
 0.25
 6.283185307179586 0.4539    0.4415
 
          nd
          nth, nphi
+	 dt,  ntime
          q_rad
          vort_k(1), vort_re, vort_im
