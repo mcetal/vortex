@@ -125,7 +125,7 @@ c Open output file for vortex path
          open (unit = 41, file = 'vort_path.m')
 c
 c if making a movie (this is not debugged right now!)
-         make_movie = .false.
+         make_movie = .true.
          if (make_movie) then
             open (unit = 37, file = 'movie/u_movie.m')
          end if
@@ -265,8 +265,8 @@ c  will need to add in Crowdy`s solution here
 	
 	    if (make_movie) then
                call DUMP_MOVIE_ALL (nth, nphi, time, u_gr, it, 37)
-               call DUMP_MOVIE_VORT (nth, nphi, time, zk_vort(1), u_gr, 
-     1                            it, 37)
+c               call DUMP_MOVIE_VORT (nth, nphi, time, zk_vort(1), u_gr, 
+c     1                            it, 37)
             end if
 c
 c Calculate velocity at a point
@@ -2787,6 +2787,7 @@ c
             end do
          ENDDO
 c
+c 
 c periodic
          do j = 1, NY
                write(if,'(e20.13,$)')(ugrid(1,J))
@@ -2799,11 +2800,10 @@ c periodic
          write (if,*) 'subplot(2,2,1)'
          write (if,*) '   surf(xgrid,ygrid,zgrid,a)'
          write (if,*) '   view([64,-4])'
-         write (if,*) '   shading interp'
-         write (if,*) '   colormap(jet2)'
-         write (if,*) '   lighting phong'
-         write (if,*) '   material dull'
-         write (if,*) '   camlight(''headlight'')'
+c         write (if,*) '   shading interp'
+c         write (if,*) '   lighting phong'
+c         write (if,*) '   material dull'
+c         write (if,*) '   camlight(''headlight'')'
          write (if,*) '   caxis([-3 5])'
          write (if,*) '   hold on'
 c         write (if,*) '   geo_3d'
@@ -2814,11 +2814,11 @@ c         write (if,*) '   geo_3d'
          write (if,*) 'subplot(2,2,2)'
          write (if,*) '   surf(xgrid,ygrid,zgrid,a)'
          write (if,*) '   view([-116,-4])'
-         write (if,*) '   shading interp'
-         write (if,*) '   colormap(jet2)'
-         write (if,*) '   lighting phong'
-         write (if,*) '   material dull'
-         write (if,*) '   camlight(''headlight'')'
+c         write (if,*) '   shading interp'
+c         write (if,*) '   colormap(jet2)'
+c         write (if,*) '   lighting phong'
+c         write (if,*) '   material dull'
+c         write (if,*) '   camlight(''headlight'')'
          write (if,*) '   caxis([-3 5])'
          write (if,*) '   hold on'
 c         write (if,*) '   geo_3d'
@@ -2883,14 +2883,14 @@ c periodic
          write (if,*) 'subplot(1,2,1)'
          write (if,*) '   surf(xgrid,ygrid,zgrid,a)'
          write (if,*) '   shading interp'
-         write (if,*) '   colormap(jet2)'
+c         write (if,*) '   colormap(jet2)'
          write (if,*) '   caxis([-3 5])'
          write (if,*) '   hold on'
 c         write (if,*) '   geo_3d'
          write (if,*) '   axis([-1 1 -1 1 -1 1])'
          write (if,*) '   axis equal'
          write (if,*) '   view([',x1,',',x2,',',x3,'])'
-         write (if,*) '   lighting phong'
+c         write (if,*) '   lighting phong'
          write (if,*) '   material dull'
          write (if,*) '   camlight(''headlight'')'
          write (if,*) '   axis off'
